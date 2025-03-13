@@ -4,18 +4,18 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: mytypes.sample.template.crossplane.io
+  name: nbgroups.vpn.netbird.crossplane.io
 spec:
-  group: sample.template.crossplane.io
+  group: vpn.netbird.crossplane.io
   names:
     categories:
     - crossplane
     - managed
-    - template
-    kind: MyType
-    listKind: MyTypeList
-    plural: mytypes
-    singular: mytype
+    - netbird
+    kind: NbGroup
+    listKind: NbGroupList
+    plural: nbgroups
+    singular: nbgroup
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -34,7 +34,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A MyType is an example API type.
+        description: A NbGroup is an example API type.
         properties:
           apiVersion:
             description: |-
@@ -54,7 +54,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: A MyTypeSpec defines the desired state of a MyType.
+            description: A NbGroupSpec defines the desired state of a NbGroup.
             properties:
               deletionPolicy:
                 default: Delete
@@ -71,12 +71,32 @@ spec:
                 - Delete
                 type: string
               forProvider:
-                description: MyTypeParameters are the configurable fields of a MyType.
+                description: NbGroupParameters are the configurable fields of a NbGroup.
                 properties:
-                  configurableField:
+                  name:
                     type: string
+                  peers:
+                    description: Peers List of peers ids
+                    items:
+                      type: string
+                    type: array
+                  resources:
+                    items:
+                      description: Resource defines model for Resource.
+                      properties:
+                        id:
+                          description: Id ID of the resource
+                          type: string
+                        type:
+                          description: ResourceType defines model for ResourceType.
+                          type: string
+                      required:
+                      - id
+                      - type
+                      type: object
+                    type: array
                 required:
-                - configurableField
+                - name
                 type: object
               managementPolicies:
                 default:
@@ -246,17 +266,66 @@ spec:
             - forProvider
             type: object
           status:
-            description: A MyTypeStatus represents the observed state of a MyType.
+            description: A NbGroupStatus represents the observed state of a NbGroup.
             properties:
               atProvider:
-                description: MyTypeObservation are the observable fields of a MyType.
+                description: NbGroupObservation are the observable fields of a NbGroup.
                 properties:
-                  configurableField:
+                  id:
+                    description: Id Group ID
                     type: string
-                  observableField:
+                  issued:
+                    description: Issued How the group was issued (api, integration,
+                      jwt)
                     type: string
+                  name:
+                    description: Name Group Name identifier
+                    type: string
+                  peers:
+                    description: Peers List of peers object
+                    items:
+                      description: PeerMinimum defines model for PeerMinimum.
+                      properties:
+                        id:
+                          description: Id Peer ID
+                          type: string
+                        name:
+                          description: Name Peer's hostname
+                          type: string
+                      required:
+                      - id
+                      - name
+                      type: object
+                    type: array
+                  peers_count:
+                    description: PeersCount Count of peers associated to the group
+                    type: integer
+                  resources:
+                    items:
+                      description: Resource defines model for Resource.
+                      properties:
+                        id:
+                          description: Id ID of the resource
+                          type: string
+                        type:
+                          description: ResourceType defines model for ResourceType.
+                          type: string
+                      required:
+                      - id
+                      - type
+                      type: object
+                    type: array
+                  resources_count:
+                    description: ResourcesCount Count of resources associated to the
+                      group
+                    type: integer
                 required:
-                - configurableField
+                - id
+                - name
+                - peers
+                - peers_count
+                - resources
+                - resources_count
                 type: object
               conditions:
                 description: Conditions of the resource.
