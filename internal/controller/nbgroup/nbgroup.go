@@ -55,8 +55,8 @@ type NbGroupService struct {
 }
 
 var (
-	newNbGroupService = func(creds []byte) (*NbGroupService, error) {
-		c := netbird.New("url", string(creds))
+	newNbGroupService = func(url string, creds []byte) (*NbGroupService, error) {
+		c := netbird.New(url, string(creds))
 		return &NbGroupService{nbCli: c}, nil
 	}
 )
@@ -94,7 +94,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 type connector struct {
 	kube         client.Client
 	usage        resource.Tracker
-	newServiceFn func(creds []byte) (*NbGroupService, error)
+	newServiceFn func(url string, creds []byte) (*NbGroupService, error)
 }
 
 // Connect typically produces an ExternalClient by:
@@ -122,8 +122,9 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errGetCreds)
 	}
+	nbManagementEndpoint := pc.Spec.MmanagementURI
 
-	svc, err := c.newServiceFn(data)
+	svc, err := c.newServiceFn(nbManagementEndpoint, data)
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
