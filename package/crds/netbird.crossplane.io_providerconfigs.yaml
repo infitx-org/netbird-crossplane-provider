@@ -103,8 +103,11 @@ spec:
                 required:
                 - source
                 type: object
+              management-uri:
+                type: string
             required:
             - credentials
+            - management-uri
             type: object
           status:
             description: A ProviderConfigStatus reflects the observed state of a ProviderConfig.
