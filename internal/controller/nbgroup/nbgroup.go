@@ -55,8 +55,8 @@ type NbGroupService struct {
 }
 
 var (
-	newNbGroupService = func(url string, creds []byte) (*NbGroupService, error) {
-		c := netbird.New(url, string(creds))
+	newNbGroupService = func(url string, creds string) (*NbGroupService, error) {
+		c := netbird.New(url, creds)
 		return &NbGroupService{nbCli: c}, nil
 	}
 )
@@ -94,7 +94,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 type connector struct {
 	kube         client.Client
 	usage        resource.Tracker
-	newServiceFn func(url string, creds []byte) (*NbGroupService, error)
+	newServiceFn func(url string, creds string) (*NbGroupService, error)
 }
 
 // Connect typically produces an ExternalClient by:
@@ -123,12 +123,11 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		return nil, errors.Wrap(err, errGetCreds)
 	}
 	nbManagementEndpoint := pc.Spec.MmanagementURI
-
-	svc, err := c.newServiceFn(nbManagementEndpoint, data)
+	creds := string(data)
+	svc, err := c.newServiceFn(nbManagementEndpoint, creds)
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
-
 	return &external{service: svc}, nil
 }
 
@@ -145,8 +144,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbGroup)
 	}
-
-	group, err := c.service.nbCli.Groups.Get(ctx, meta.GetExternalName(cr))
+	externalName := meta.GetExternalName(cr)
+	if externalName == "" {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+	group, err := c.service.nbCli.Groups.Get(ctx, externalName)
 	if err != nil {
 		return managed.ExternalObservation{
 			ResourceExists: false,
@@ -154,9 +156,13 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
-		Id:     group.Id,
-		Issued: group.Issued,
-		Name:   group.Name,
+		Id:             group.Id,
+		Issued:         group.Issued,
+		Name:           group.Name,
+		Peers:          group.Peers,
+		PeersCount:     group.PeersCount,
+		Resources:      group.Resources,
+		ResourcesCount: group.ResourcesCount,
 	}
 
 	cr.Status.SetConditions(xpv1.Available())
@@ -175,24 +181,28 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 
 	fmt.Printf("Creating: %+v", cr)
 	group, err := c.service.nbCli.Groups.Create(ctx, nbapi.GroupRequest{
-		Name: meta.GetExternalName(cr),
+		Name: cr.Spec.ForProvider.Name,
 	})
 
 	if err != nil {
+		fmt.Printf("err creating group: %+v", err)
 		return managed.ExternalCreation{
 			// Optionally return any details that may be required to connect to the
 			// external resource. These will be stored as the connection secret.
 			ConnectionDetails: managed.ConnectionDetails{},
 		}, err
 	}
-
+	fmt.Printf("group created: %+v", group)
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
-		Id:     group.Id,
-		Issued: group.Issued,
-		Name:   group.Name,
+		Id:             group.Id,
+		Issued:         group.Issued,
+		Name:           group.Name,
+		Peers:          group.Peers,
+		PeersCount:     group.PeersCount,
+		Resources:      group.Resources,
+		ResourcesCount: group.ResourcesCount,
 	}
-
-	cr.Status.SetConditions(xpv1.Available())
+	meta.SetExternalName(cr, group.Id)
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -206,9 +216,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbGroup)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
-
-	cr.Status.SetConditions(xpv1.Available())
+	fmt.Printf("Updating: %+v", cr) //todo
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.

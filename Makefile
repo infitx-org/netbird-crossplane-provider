@@ -87,12 +87,13 @@ run: go.build
 	@# To see other arguments that can be provided, run the command with --help instead
 	$(GO_OUT_DIR)/provider --debug
 
-dev: $(KIND) $(KUBECTL)
+dev: $(KIND) $(KUBECTL) $(HELM)
 	@$(INFO) Creating kind cluster
 	@$(KIND) create cluster --name=$(PROJECT_NAME)-dev
 	@$(KUBECTL) cluster-info --context kind-$(PROJECT_NAME)-dev
 	@$(INFO) Installing Crossplane CRDs
-	@$(KUBECTL) apply --server-side -k https://github.com/crossplane/crossplane//cluster?ref=master
+	@$(HELM) repo add crossplane-stable https://charts.crossplane.io/stable
+	@$(HELM) upgrade --install crossplane --namespace crossplane-system --create-namespace crossplane-stable/crossplane
 	@$(INFO) Installing Provider Netbird CRDs
 	@$(KUBECTL) apply -R -f package/crds
 	@$(INFO) Starting Provider Netbird controllers

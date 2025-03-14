@@ -47,14 +47,14 @@ type NbGroupObservation struct {
 	Name string `json:"name"`
 
 	// Peers List of peers object
-	Peers []netbirdapi.PeerMinimum `json:"peers"`
+	Peers []netbirdapi.PeerMinimum `json:"peers,omitempty"`
 
 	// PeersCount Count of peers associated to the group
-	PeersCount int                   `json:"peers_count"`
-	Resources  []netbirdapi.Resource `json:"resources"`
+	PeersCount int                   `json:"peers_count,omitempty"`
+	Resources  []netbirdapi.Resource `json:"resources,omitempty"`
 
 	// ResourcesCount Count of resources associated to the group
-	ResourcesCount int `json:"resources_count"`
+	ResourcesCount int `json:"resources_count,omitempty"`
 }
 
 // A NbGroupSpec defines the desired state of a NbGroup.

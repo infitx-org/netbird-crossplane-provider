@@ -322,10 +322,6 @@ spec:
                 required:
                 - id
                 - name
-                - peers
-                - peers_count
-                - resources
-                - resources_count
                 type: object
               conditions:
                 description: Conditions of the resource.

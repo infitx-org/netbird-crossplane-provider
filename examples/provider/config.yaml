@@ -1,25 +1,31 @@
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: crossplane-system
----
-apiVersion: v1
 kind: Secret
 metadata:
   namespace: crossplane-system
   name: example-provider-secret
 type: Opaque
 data:
-  # credentials: BASE64ENCODED_PROVIDER_CREDS
+  credentials: BASE64-ENC-TOKEN
 ---
 apiVersion: netbird.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
   name: example
 spec:
+  management-uri: https://URL:443
   credentials:
     source: Secret
     secretRef:
       namespace: crossplane-system
       name: example-provider-secret
       key: credentials
+---
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbGroup
+metadata:
+  name: xplanegrouptest
+spec:
+  forProvider:
+    name: xplanegrouptest
+  providerConfigRef:
+    name: example
