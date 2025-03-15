@@ -75,26 +75,6 @@ spec:
                 properties:
                   name:
                     type: string
-                  peers:
-                    description: Peers List of peers ids
-                    items:
-                      type: string
-                    type: array
-                  resources:
-                    items:
-                      description: Resource defines model for Resource.
-                      properties:
-                        id:
-                          description: Id ID of the resource
-                          type: string
-                        type:
-                          description: ResourceType defines model for ResourceType.
-                          type: string
-                      required:
-                      - id
-                      - type
-                      type: object
-                    type: array
                 required:
                 - name
                 type: object
@@ -278,9 +258,6 @@ spec:
                     description: Issued How the group was issued (api, integration,
                       jwt)
                     type: string
-                  name:
-                    description: Name Group Name identifier
-                    type: string
                   peers:
                     description: Peers List of peers object
                     items:
@@ -321,7 +298,6 @@ spec:
                     type: integer
                 required:
                 - id
-                - name
                 type: object
               conditions:
                 description: Conditions of the resource.

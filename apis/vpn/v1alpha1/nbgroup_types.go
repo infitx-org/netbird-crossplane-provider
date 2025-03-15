@@ -29,10 +29,6 @@ import (
 // NbGroupParameters are the configurable fields of a NbGroup.
 type NbGroupParameters struct {
 	Name string `json:"name"`
-
-	// Peers List of peers ids
-	Peers     *[]string              `json:"peers,omitempty"`
-	Resources *[]netbirdapi.Resource `json:"resources,omitempty"`
 }
 
 // NbGroupObservation are the observable fields of a NbGroup.
@@ -42,9 +38,6 @@ type NbGroupObservation struct {
 
 	// Issued How the group was issued (api, integration, jwt)
 	Issued *netbirdapi.GroupIssued `json:"issued,omitempty"`
-
-	// Name Group Name identifier
-	Name string `json:"name"`
 
 	// Peers List of peers object
 	Peers []netbirdapi.PeerMinimum `json:"peers,omitempty"`

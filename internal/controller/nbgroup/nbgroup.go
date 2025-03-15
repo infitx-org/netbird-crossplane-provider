@@ -158,7 +158,6 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
 		Id:             group.Id,
 		Issued:         group.Issued,
-		Name:           group.Name,
 		Peers:          group.Peers,
 		PeersCount:     group.PeersCount,
 		Resources:      group.Resources,
@@ -196,7 +195,6 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
 		Id:             group.Id,
 		Issued:         group.Issued,
-		Name:           group.Name,
 		Peers:          group.Peers,
 		PeersCount:     group.PeersCount,
 		Resources:      group.Resources,
@@ -216,7 +214,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbGroup)
 	}
 
-	fmt.Printf("Updating: %+v", cr) //todo
+	fmt.Printf("Updating: %+v", cr) //no fields update on group
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
