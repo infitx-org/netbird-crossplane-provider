@@ -28,7 +28,7 @@ import (
 
 // NbAccountParameters are the configurable fields of a NbAccount.
 type NbAccountParameters struct {
-	Name string `json:"name"`
+	Settings AccountSettings `json:"settings"`
 }
 
 // NbAccountObservation are the observable fields of a NbAccount.

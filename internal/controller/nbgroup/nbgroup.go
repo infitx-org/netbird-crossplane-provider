@@ -150,9 +150,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	group, err := c.service.nbCli.Groups.Get(ctx, externalName)
 	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{

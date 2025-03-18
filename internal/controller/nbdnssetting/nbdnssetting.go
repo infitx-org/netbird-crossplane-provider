@@ -151,6 +151,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	fmt.Printf("Observing: %+v", cr)
 	settings, err := c.service.nbCli.DNS.GetSettings(ctx)
 	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil

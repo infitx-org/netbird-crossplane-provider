@@ -22,7 +22,9 @@ import (
 
 	"github.com/crossplane/provider-netbird/internal/controller/config"
 	"github.com/crossplane/provider-netbird/internal/controller/nbaccount"
+	"github.com/crossplane/provider-netbird/internal/controller/nbdnssetting"
 	"github.com/crossplane/provider-netbird/internal/controller/nbgroup"
+	"github.com/crossplane/provider-netbird/internal/controller/nbnameserver"
 )
 
 // Setup creates all Netbird controllers with the supplied logger and adds them to
@@ -32,6 +34,8 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		config.Setup,
 		nbgroup.Setup,
 		nbaccount.Setup,
+		nbdnssetting.Setup,
+		nbnameserver.Setup,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err

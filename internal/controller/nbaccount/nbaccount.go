@@ -153,13 +153,13 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	//list accounts always returns the only account
 	accounts, err := c.service.nbCli.Accounts.List(ctx)
 	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
 	account := accounts[0]
 	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
-		Id:       account.Id,
 		Settings: *v1alpha1.NbToApiAccountSettings(account.Settings),
 	}
 	meta.SetExternalName(cr, account.Id)

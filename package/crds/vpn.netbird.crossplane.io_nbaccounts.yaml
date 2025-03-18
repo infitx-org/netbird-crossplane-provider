@@ -74,10 +74,75 @@ spec:
                 description: NbAccountParameters are the configurable fields of a
                   NbAccount.
                 properties:
-                  name:
-                    type: string
+                  settings:
+                    description: AccountSettings defines model for AccountSettings.
+                    properties:
+                      extra:
+                        description: AccountExtraSettings defines model for AccountExtraSettings.
+                        properties:
+                          peer_approval_enabled:
+                            description: PeerApprovalEnabled (Cloud only) Enables
+                              or disables peer approval globally. If enabled, all
+                              peers added will be in pending state until approved
+                              by an admin.
+                            type: boolean
+                        type: object
+                      groups_propagation_enabled:
+                        description: GroupsPropagationEnabled Allows propagate the
+                          new user auto groups to peers that belongs to the user
+                        type: boolean
+                      jwt_allow_groups:
+                        description: JwtAllowGroups List of groups to which users
+                          are allowed access
+                        items:
+                          type: string
+                        type: array
+                      jwt_groups_claim_name:
+                        description: JwtGroupsClaimName Name of the claim from which
+                          we extract groups names to add it to account groups.
+                        type: string
+                      jwt_groups_enabled:
+                        description: JwtGroupsEnabled Allows extract groups from JWT
+                          claim and add it to account groups.
+                        type: boolean
+                      peer_inactivity_expiration:
+                        description: PeerInactivityExpiration Period of time of inactivity
+                          after which peer session expires (seconds).
+                        type: integer
+                      peer_inactivity_expiration_enabled:
+                        description: PeerInactivityExpirationEnabled Enables or disables
+                          peer inactivity expiration globally. After peer's session
+                          has expired the user has to log in (authenticate). Applies
+                          only to peers that were added by a user (interactive SSO
+                          login).
+                        type: boolean
+                      peer_login_expiration:
+                        description: PeerLoginExpiration Period of time after which
+                          peer login expires (seconds).
+                        type: integer
+                      peer_login_expiration_enabled:
+                        description: PeerLoginExpirationEnabled Enables or disables
+                          peer login expiration globally. After peer's login has expired
+                          the user has to log in (authenticate). Applies only to peers
+                          that were added by a user (interactive SSO login).
+                        type: boolean
+                      regular_users_view_blocked:
+                        description: RegularUsersViewBlocked Allows blocking regular
+                          users from viewing parts of the system.
+                        type: boolean
+                      routing_peer_dns_resolution_enabled:
+                        description: RoutingPeerDnsResolutionEnabled Enables or disables
+                          DNS resolution on the routing peers
+                        type: boolean
+                    required:
+                    - peer_inactivity_expiration
+                    - peer_inactivity_expiration_enabled
+                    - peer_login_expiration
+                    - peer_login_expiration_enabled
+                    - regular_users_view_blocked
+                    type: object
                 required:
-                - name
+                - settings
                 type: object
               managementPolicies:
                 default:
