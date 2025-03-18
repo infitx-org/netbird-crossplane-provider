@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nbgroup
+package nbnameserver
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
@@ -33,7 +34,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	apisv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
 	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
 	"github.com/crossplane/provider-netbird/internal/features"
@@ -42,10 +42,10 @@ import (
 )
 
 const (
-	errNotNbGroup   = "managed resource is not a NbGroup custom resource"
-	errTrackPCUsage = "cannot track ProviderConfig usage"
-	errGetPC        = "cannot get ProviderConfig"
-	errGetCreds     = "cannot get credentials"
+	errNotNbNameServer = "managed resource is not a NbNameServer custom resource"
+	errTrackPCUsage    = "cannot track ProviderConfig usage"
+	errGetPC           = "cannot get ProviderConfig"
+	errGetCreds        = "cannot get credentials"
 
 	errNewClient = "cannot create new Service"
 )
@@ -61,9 +61,9 @@ var (
 	}
 )
 
-// Setup adds a controller that reconciles NbGroup managed resources.
+// Setup adds a controller that reconciles NbNameServer managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(v1alpha1.NbGroupGroupKind)
+	name := managed.ControllerName(v1alpha1.NbNameServerGroupKind)
 
 	cps := []managed.ConnectionPublisher{managed.NewAPISecretPublisher(mgr.GetClient(), mgr.GetScheme())}
 	if o.Features.Enabled(features.EnableAlphaExternalSecretStores) {
@@ -71,7 +71,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	}
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.NbGroupGroupVersionKind),
+		resource.ManagedKind(v1alpha1.NbNameServerGroupVersionKind),
 		managed.WithExternalConnecter(&connector{
 			kube:         mgr.GetClient(),
 			usage:        resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
@@ -85,7 +85,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
-		For(&v1alpha1.NbGroup{}).
+		For(&v1alpha1.NbNameServer{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -103,9 +103,9 @@ type connector struct {
 // 3. Getting the credentials specified by the ProviderConfig.
 // 4. Using the credentials to form a client.
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbNameServer)
 	if !ok {
-		return nil, errors.New(errNotNbGroup)
+		return nil, errors.New(errNotNbNameServer)
 	}
 
 	if err := c.usage.Track(ctx, mg); err != nil {
@@ -122,12 +122,14 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errGetCreds)
 	}
+
 	nbManagementEndpoint := pc.Spec.MmanagementURI
 	creds := string(data)
 	svc, err := c.newServiceFn(nbManagementEndpoint, creds)
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
+
 	return &external{service: svc}, nil
 }
 
@@ -140,70 +142,97 @@ type external struct {
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbNameServer)
 	if !ok {
-		return managed.ExternalObservation{}, errors.New(errNotNbGroup)
+		return managed.ExternalObservation{}, errors.New(errNotNbNameServer)
 	}
+
+	// These fmt statements should be removed in the real implementation.
+	fmt.Printf("Observing: %+v", cr)
+
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
-	group, err := c.service.nbCli.Groups.Get(ctx, externalName)
+	nameservergroup, err := c.service.nbCli.DNS.GetNameserverGroup(ctx, externalName)
 	if err != nil {
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
 
-	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
-		Id:             group.Id,
-		Issued:         group.Issued,
-		Peers:          group.Peers,
-		PeersCount:     group.PeersCount,
-		Resources:      group.Resources,
-		ResourcesCount: group.ResourcesCount,
+	cr.Status.AtProvider = v1alpha1.NbNameServerObservation{
+		Id:                   nameservergroup.Id,
+		Description:          nameservergroup.Description,
+		Domains:              nameservergroup.Domains,
+		Groups:               nameservergroup.Groups,
+		Enabled:              nameservergroup.Enabled,
+		Name:                 nameservergroup.Name,
+		Nameservers:          *v1alpha1.ApitoNbNameServer(nameservergroup.Nameservers),
+		Primary:              nameservergroup.Primary,
+		SearchDomainsEnabled: nameservergroup.SearchDomainsEnabled,
 	}
 
 	cr.Status.SetConditions(xpv1.Available())
-
+	isUpToDate, err := v1alpha1.IsNbNameServerUpToDate(*nameservergroup, cr.Status.AtProvider)
+	if err != nil {
+		return managed.ExternalObservation{}, err
+	}
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: true,
+		ResourceUpToDate: isUpToDate,
 	}, nil
 }
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbNameServer)
 	if !ok {
-		return managed.ExternalCreation{}, errors.New(errNotNbGroup)
+		return managed.ExternalCreation{}, errors.New(errNotNbNameServer)
 	}
 
 	fmt.Printf("Creating: %+v", cr)
-	group, err := c.service.nbCli.Groups.Create(ctx, nbapi.GroupRequest{
-		Name: cr.Spec.ForProvider.Name,
+	nameserverGroup, err := c.service.nbCli.DNS.CreateNameserverGroup(ctx, nbapi.PostApiDnsNameserversJSONRequestBody{
+		Description:          cr.Spec.ForProvider.Description,
+		Domains:              cr.Spec.ForProvider.Domains,
+		Groups:               cr.Spec.ForProvider.Groups,
+		Enabled:              cr.Spec.ForProvider.Enabled,
+		Name:                 cr.Spec.ForProvider.Name,
+		Nameservers:          *v1alpha1.NbtoApiNameServer(cr.Spec.ForProvider.Nameservers),
+		Primary:              cr.Spec.ForProvider.Primary,
+		SearchDomainsEnabled: cr.Spec.ForProvider.SearchDomainsEnabled,
 	})
-
 	if err != nil {
-		fmt.Printf("err creating group: %+v", err)
-		return managed.ExternalCreation{
-			// Optionally return any details that may be required to connect to the
-			// external resource. These will be stored as the connection secret.
-			ConnectionDetails: managed.ConnectionDetails{},
-		}, err
+		return managed.ExternalCreation{}, err
 	}
-	fmt.Printf("group created: %+v", group)
-	meta.SetExternalName(cr, group.Id)
-	return managed.ExternalCreation{}, nil
+	meta.SetExternalName(cr, nameserverGroup.Id)
+	return managed.ExternalCreation{
+		// Optionally return any details that may be required to connect to the
+		// external resource. These will be stored as the connection secret.
+		ConnectionDetails: managed.ConnectionDetails{},
+	}, nil
 }
 
-// we don't update group
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbNameServer)
 	if !ok {
-		return managed.ExternalUpdate{}, errors.New(errNotNbGroup)
+		return managed.ExternalUpdate{}, errors.New(errNotNbNameServer)
 	}
 
-	fmt.Printf("Updating: %+v", cr) //no fields update on group
+	fmt.Printf("Updating: %+v", cr)
+
+	_, err := c.service.nbCli.DNS.UpdateNameserverGroup(ctx, meta.GetExternalName(cr), nbapi.PutApiDnsNameserversNsgroupIdJSONRequestBody{
+		Description:          cr.Spec.ForProvider.Description,
+		Domains:              cr.Spec.ForProvider.Domains,
+		Groups:               cr.Spec.ForProvider.Groups,
+		Enabled:              cr.Spec.ForProvider.Enabled,
+		Name:                 cr.Spec.ForProvider.Name,
+		Nameservers:          *v1alpha1.NbtoApiNameServer(cr.Spec.ForProvider.Nameservers),
+		Primary:              cr.Spec.ForProvider.Primary,
+		SearchDomainsEnabled: cr.Spec.ForProvider.SearchDomainsEnabled,
+	})
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -212,12 +241,13 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 }
 
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbNameServer)
 	if !ok {
-		return errors.New(errNotNbGroup)
+		return errors.New(errNotNbNameServer)
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
-	return c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
+	c.service.nbCli.DNS.DeleteNameserverGroup(ctx, meta.GetExternalName(cr))
 
+	return nil
 }

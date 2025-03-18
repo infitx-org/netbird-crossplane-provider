@@ -29,3 +29,28 @@ spec:
     name: xplanegrouptest
   providerConfigRef:
     name: example
+---
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbAccount
+metadata:
+  name: xplaneaccounttest
+spec:
+  forProvider:
+    name: xplaneaccounttest
+    settings:
+      extra:
+        peer_approval_enabled: false
+      groups_propagation_enabled: true
+      jwt_allow_groups:
+        - "311043029546828449:techops-admin"
+        - "311043029546828449:techops-users"
+      jwt_groups_claim_name: "zitadel:grants"
+      jwt_groups_enabled: true
+      peer_inactivity_expiration: 0
+      peer_inactivity_expiration_enabled: false
+      peer_login_expiration: 86400
+      peer_login_expiration_enabled: true
+      regular_users_view_blocked: true
+      routing_peer_dns_resolution_enabled: false
+  providerConfigRef:
+    name: example

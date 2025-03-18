@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nbgroup
+package nbaccount
 
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,11 +39,11 @@ import (
 	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
 	"github.com/crossplane/provider-netbird/internal/features"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
-	nbapi "github.com/netbirdio/netbird/management/server/http/api"
+	"github.com/netbirdio/netbird/management/server/http/api"
 )
 
 const (
-	errNotNbGroup   = "managed resource is not a NbGroup custom resource"
+	errNotNbAccount = "managed resource is not a NbAccount custom resource"
 	errTrackPCUsage = "cannot track ProviderConfig usage"
 	errGetPC        = "cannot get ProviderConfig"
 	errGetCreds     = "cannot get credentials"
@@ -61,9 +62,9 @@ var (
 	}
 )
 
-// Setup adds a controller that reconciles NbGroup managed resources.
+// Setup adds a controller that reconciles NbAccount managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(v1alpha1.NbGroupGroupKind)
+	name := managed.ControllerName(v1alpha1.NbAccountGroupKind)
 
 	cps := []managed.ConnectionPublisher{managed.NewAPISecretPublisher(mgr.GetClient(), mgr.GetScheme())}
 	if o.Features.Enabled(features.EnableAlphaExternalSecretStores) {
@@ -71,7 +72,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	}
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.NbGroupGroupVersionKind),
+		resource.ManagedKind(v1alpha1.NbAccountGroupVersionKind),
 		managed.WithExternalConnecter(&connector{
 			kube:         mgr.GetClient(),
 			usage:        resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
@@ -85,7 +86,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
-		For(&v1alpha1.NbGroup{}).
+		For(&v1alpha1.NbAccount{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -103,9 +104,9 @@ type connector struct {
 // 3. Getting the credentials specified by the ProviderConfig.
 // 4. Using the credentials to form a client.
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbAccount)
 	if !ok {
-		return nil, errors.New(errNotNbGroup)
+		return nil, errors.New(errNotNbAccount)
 	}
 
 	if err := c.usage.Track(ctx, mg); err != nil {
@@ -122,12 +123,14 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errGetCreds)
 	}
+
 	nbManagementEndpoint := pc.Spec.MmanagementURI
 	creds := string(data)
 	svc, err := c.newServiceFn(nbManagementEndpoint, creds)
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
+
 	return &external{service: svc}, nil
 }
 
@@ -140,70 +143,69 @@ type external struct {
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbAccount)
 	if !ok {
-		return managed.ExternalObservation{}, errors.New(errNotNbGroup)
+		return managed.ExternalObservation{}, errors.New(errNotNbAccount)
 	}
-	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
-		return managed.ExternalObservation{ResourceExists: false}, nil
-	}
-	group, err := c.service.nbCli.Groups.Get(ctx, externalName)
+
+	// These fmt statements should be removed in the real implementation.
+	fmt.Printf("Observing: %+v", cr)
+	//list accounts always returns the only account
+	accounts, err := c.service.nbCli.Accounts.List(ctx)
 	if err != nil {
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
-
-	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
-		Id:             group.Id,
-		Issued:         group.Issued,
-		Peers:          group.Peers,
-		PeersCount:     group.PeersCount,
-		Resources:      group.Resources,
-		ResourcesCount: group.ResourcesCount,
+	account := accounts[0]
+	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
+		Id:       account.Id,
+		Settings: *v1alpha1.NbToApiAccountSettings(account.Settings),
 	}
-
+	meta.SetExternalName(cr, account.Id)
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
-		ResourceExists:   true,
-		ResourceUpToDate: true,
+		ResourceExists:    true, //resource always exists
+		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.Settings, *v1alpha1.NbToApiAccountSettings(account.Settings)),
+		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
+// this method should never be called since we don't create the account, only update settings
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbAccount)
 	if !ok {
-		return managed.ExternalCreation{}, errors.New(errNotNbGroup)
+		return managed.ExternalCreation{}, errors.New(errNotNbAccount)
+	}
+	fmt.Printf("Creating: %+v", cr)
+	return managed.ExternalCreation{
+		// Optionally return any details that may be required to connect to the
+		// external resource. These will be stored as the connection secret.
+		ConnectionDetails: managed.ConnectionDetails{},
+	}, nil
+}
+
+func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
+	cr, ok := mg.(*v1alpha1.NbAccount)
+	if !ok {
+		return managed.ExternalUpdate{}, errors.New(errNotNbAccount)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
-	group, err := c.service.nbCli.Groups.Create(ctx, nbapi.GroupRequest{
-		Name: cr.Spec.ForProvider.Name,
+	fmt.Printf("Updating: %+v", cr)
+	accountId := meta.GetExternalName(cr)
+	if accountId == "" {
+		return managed.ExternalUpdate{}, errors.New("can't find accountid")
+	}
+	accountsettings := v1alpha1.ApitoNbAccountSettings(cr.Status.AtProvider.Settings)
+	_, err := c.service.nbCli.Accounts.Update(ctx, accountId, api.AccountRequest{
+		Settings: *accountsettings,
 	})
 
 	if err != nil {
-		fmt.Printf("err creating group: %+v", err)
-		return managed.ExternalCreation{
-			// Optionally return any details that may be required to connect to the
-			// external resource. These will be stored as the connection secret.
-			ConnectionDetails: managed.ConnectionDetails{},
-		}, err
-	}
-	fmt.Printf("group created: %+v", group)
-	meta.SetExternalName(cr, group.Id)
-	return managed.ExternalCreation{}, nil
-}
-
-// we don't update group
-func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mg.(*v1alpha1.NbGroup)
-	if !ok {
-		return managed.ExternalUpdate{}, errors.New(errNotNbGroup)
+		return managed.ExternalUpdate{}, errors.New(err.Error())
 	}
 
-	fmt.Printf("Updating: %+v", cr) //no fields update on group
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -211,13 +213,14 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
+// this method should never be called since we don't create/delete the account, only update settings
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*v1alpha1.NbGroup)
+	cr, ok := mg.(*v1alpha1.NbAccount)
 	if !ok {
-		return errors.New(errNotNbGroup)
+		return errors.New(errNotNbAccount)
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
-	return c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
 
+	return nil
 }
