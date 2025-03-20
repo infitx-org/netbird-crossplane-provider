@@ -14,39 +14,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nbdnssetting
+package nbuser
 
 import (
 	"context"
 	"fmt"
-	"reflect"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	apisv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
-	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/provider-netbird/internal/controller/nb"
+
+	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
 	"github.com/crossplane/provider-netbird/internal/features"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
-	"github.com/netbirdio/netbird/management/server/http/api"
+	nbapi "github.com/netbirdio/netbird/management/server/http/api"
 )
 
 const (
-	errNotNbDnsSetting = "managed resource is not a NbDnsSetting custom resource"
-	errTrackPCUsage    = "cannot track ProviderConfig usage"
-	errGetPC           = "cannot get ProviderConfig"
-	errGetCreds        = "cannot get credentials"
+	errNotNbUser    = "managed resource is not a NbUser custom resource"
+	errTrackPCUsage = "cannot track ProviderConfig usage"
+	errGetPC        = "cannot get ProviderConfig"
+	errGetCreds     = "cannot get credentials"
 
 	errNewClient = "cannot create new Service"
 )
@@ -67,9 +69,9 @@ var (
 	}
 )
 
-// Setup adds a controller that reconciles NbDnsSetting managed resources.
+// Setup adds a controller that reconciles NbUser managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(v1alpha1.NbDnsSettingGroupKind)
+	name := managed.ControllerName(v1alpha1.NbUserGroupKind)
 
 	cps := []managed.ConnectionPublisher{managed.NewAPISecretPublisher(mgr.GetClient(), mgr.GetScheme())}
 	if o.Features.Enabled(features.EnableAlphaExternalSecretStores) {
@@ -77,7 +79,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	}
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.NbDnsSettingGroupVersionKind),
+		resource.ManagedKind(v1alpha1.NbUserGroupVersionKind),
 		managed.WithExternalConnecter(&connector{
 			kube:         mgr.GetClient(),
 			usage:        resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
@@ -91,7 +93,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
-		For(&v1alpha1.NbDnsSetting{}).
+		For(&v1alpha1.NbUser{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -109,9 +111,9 @@ type connector struct {
 // 3. Getting the credentials specified by the ProviderConfig.
 // 4. Using the credentials to form a client.
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.NbDnsSetting)
+	cr, ok := mg.(*v1alpha1.NbUser)
 	if !ok {
-		return nil, errors.New(errNotNbDnsSetting)
+		return nil, errors.New(errNotNbUser)
 	}
 
 	if err := c.usage.Track(ctx, mg); err != nil {
@@ -128,7 +130,6 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errGetCreds)
 	}
-
 	nbManagementEndpoint := pc.Spec.MmanagementURI
 	var creds string
 	var err2 error
@@ -156,37 +157,54 @@ type external struct {
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mg.(*v1alpha1.NbDnsSetting)
+	cr, ok := mg.(*v1alpha1.NbUser)
 	if !ok {
-		return managed.ExternalObservation{}, errors.New(errNotNbDnsSetting)
+		return managed.ExternalObservation{}, errors.New(errNotNbUser)
 	}
-
-	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
-	settings, err := c.service.nbCli.DNS.GetSettings(ctx)
+	users, err := c.service.nbCli.Users.List(ctx)
 	if err != nil {
 		fmt.Printf("received error on call to nb: %+v", err)
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, err
 	}
-	cr.Status.AtProvider = v1alpha1.NbDnsSettingObservation{
-		DisabledManagementGroups: settings.DisabledManagementGroups,
+	var apiuser nbapi.User
+	for _, user := range users {
+		if user.Email == cr.Spec.ForProvider.Email {
+			apiuser = user
+		}
 	}
+	cr.Status.AtProvider = v1alpha1.NbUserObservation{
+		Id:            apiuser.Id,
+		AutoGroups:    apiuser.AutoGroups,
+		Email:         apiuser.Email,
+		Role:          apiuser.Role,
+		IsBlocked:     apiuser.IsBlocked,
+		IsCurrent:     apiuser.IsCurrent,
+		IsServiceUser: apiuser.IsServiceUser,
+		Issued:        apiuser.Issued,
+		Name:          apiuser.Name,
+		Permissions: &v1alpha1.UserPermissions{
+			DashboardView: (*v1alpha1.UserPermissionsDashboardView)(apiuser.Permissions.DashboardView),
+		},
+		Status: v1alpha1.UserStatus(apiuser.Status),
+	}
+	meta.SetExternalName(cr, apiuser.Id)
+	uptodate := IsUserUpToDate(cr.Status.AtProvider, apiuser)
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
-		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.DisabledManagementGroups, settings.DisabledManagementGroups),
+		ResourceExists:    true,
+		ResourceUpToDate:  uptodate,
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-// this method should never be called since we don't create the account, only update settings
+// no create
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mg.(*v1alpha1.NbDnsSetting)
+	cr, ok := mg.(*v1alpha1.NbUser)
 	if !ok {
-		return managed.ExternalCreation{}, errors.New(errNotNbDnsSetting)
+		return managed.ExternalCreation{}, errors.New(errNotNbUser)
 	}
 
 	fmt.Printf("Creating: %+v", cr)
@@ -199,20 +217,18 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 }
 
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mg.(*v1alpha1.NbDnsSetting)
+	cr, ok := mg.(*v1alpha1.NbUser)
 	if !ok {
-		return managed.ExternalUpdate{}, errors.New(errNotNbDnsSetting)
+		return managed.ExternalUpdate{}, errors.New(errNotNbUser)
 	}
 
 	fmt.Printf("Updating: %+v", cr)
-	_, err := c.service.nbCli.DNS.UpdateSettings(ctx, api.PutApiDnsSettingsJSONRequestBody{
-		DisabledManagementGroups: cr.Spec.ForProvider.DisabledManagementGroups,
-	})
-
-	if err != nil {
-		return managed.ExternalUpdate{}, errors.New(err.Error())
-	}
-
+	// _, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
+	// 	Role: cr.Spec.ForProvider.Role,
+	// })
+	// if err != nil {
+	// 	return managed.ExternalUpdate{}, err
+	// }
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -220,14 +236,23 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
-// this method should never be called since we don't create/delete the account, only update settings
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*v1alpha1.NbDnsSetting)
+	cr, ok := mg.(*v1alpha1.NbUser)
 	if !ok {
-		return errors.New(errNotNbDnsSetting)
+		return errors.New(errNotNbUser)
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
 
 	return nil
+}
+
+func IsUserUpToDate(user v1alpha1.NbUserObservation, apiUser nbapi.User) bool {
+	if !cmp.Equal(user.Name, apiUser.Name) {
+		return false
+	}
+	if !cmp.Equal(user.Role, apiUser.Role) {
+		return false
+	}
+	return true
 }

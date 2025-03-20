@@ -36,6 +36,7 @@ import (
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	apisv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
 	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
+	nbcontrol "github.com/crossplane/provider-netbird/internal/controller/nb"
 	"github.com/crossplane/provider-netbird/internal/features"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
@@ -55,8 +56,13 @@ type NbService struct {
 }
 
 var (
-	newNbService = func(url string, creds string) (*NbService, error) {
-		c := netbird.New(url, creds)
+	newNbService = func(url string, creds string, credType string) (*NbService, error) {
+		var c *netbird.Client
+		if credType == "oauth" {
+			c = netbird.NewWithBearerToken(url, creds)
+		} else {
+			c = netbird.New(url, creds)
+		}
 		return &NbService{nbCli: c}, nil
 	}
 )
@@ -94,7 +100,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 type connector struct {
 	kube         client.Client
 	usage        resource.Tracker
-	newServiceFn func(url string, creds string) (*NbService, error)
+	newServiceFn func(url string, creds string, credsType string) (*NbService, error)
 }
 
 // Connect typically produces an ExternalClient by:
@@ -123,8 +129,17 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		return nil, errors.Wrap(err, errGetCreds)
 	}
 	nbManagementEndpoint := pc.Spec.MmanagementURI
-	creds := string(data)
-	svc, err := c.newServiceFn(nbManagementEndpoint, creds)
+	var creds string
+	var err2 error
+	if pc.Spec.CredentialsType == "oauth" {
+		creds, err2 = nbcontrol.GetTokenUsingOauth(string(data), pc.Spec.OauthIssuerUrl)
+		if err2 != nil {
+			return nil, errors.Wrap(err2, errNewClient)
+		}
+	} else {
+		creds = string(data)
+	}
+	svc, err := c.newServiceFn(nbManagementEndpoint, creds, pc.Spec.CredentialsType)
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}

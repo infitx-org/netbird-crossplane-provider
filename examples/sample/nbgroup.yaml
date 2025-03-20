@@ -1,0 +1,9 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbGroup
+metadata:
+  name: xplanegrouptest
+spec:
+  forProvider:
+    name: xplanegrouptest
+  providerConfigRef:
+    name: example

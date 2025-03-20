@@ -23,8 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	"github.com/google/go-cmp/cmp"
-	netbirdapi "github.com/netbirdio/netbird/management/server/http/api"
 )
 
 // NbNameServerParameters are the configurable fields of a NbNameServer.
@@ -144,49 +142,4 @@ var (
 
 func init() {
 	SchemeBuilder.Register(&NbNameServer{}, &NbNameServerList{})
-}
-func ApitoNbNameServer(p []netbirdapi.Nameserver) *[]Nameserver {
-
-	nameservers := make([]Nameserver, len(p))
-	for i, ns := range p {
-		nameservers[i] = Nameserver{
-			Ip:     ns.Ip,
-			Port:   ns.Port,
-			NsType: NameserverNsType(ns.NsType),
-		}
-	}
-	return &nameservers
-}
-func NbtoApiNameServer(p []Nameserver) *[]netbirdapi.Nameserver {
-
-	nameservers := make([]netbirdapi.Nameserver, len(p))
-	for i, ns := range p {
-		nameservers[i] = netbirdapi.Nameserver{
-			Ip:     ns.Ip,
-			Port:   ns.Port,
-			NsType: netbirdapi.NameserverNsType(ns.NsType),
-		}
-	}
-	return &nameservers
-}
-func IsNbNameServerUpToDate(p netbirdapi.NameserverGroup, ns NbNameServerObservation) (bool, error) {
-	if !cmp.Equal(p.Description, ns.Description) {
-		return false, nil
-	}
-	if !cmp.Equal(p.Domains, ns.Domains) {
-		return false, nil
-	}
-	if !cmp.Equal(p.Enabled, ns.Enabled) {
-		return false, nil
-	}
-	if !cmp.Equal(p.Groups, ns.Groups) {
-		return false, nil
-	}
-	if !cmp.Equal(p.Name, ns.Name) {
-		return false, nil
-	}
-	if !cmp.Equal(p.Nameservers, ns.Nameservers) {
-		return false, nil
-	}
-	return true, nil
 }

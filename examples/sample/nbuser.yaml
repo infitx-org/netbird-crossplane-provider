@@ -1,0 +1,10 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbUser
+metadata:
+  name: xplaneusertest
+spec:
+  managementPolicies: ["Observe"]
+  providerConfigRef:
+    name: example
+  forProvider:
+    email: sijo.george@infitx.com

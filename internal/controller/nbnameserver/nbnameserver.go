@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,6 +37,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	apisv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
+	nbcontrol "github.com/crossplane/provider-netbird/internal/controller/nb"
+
 	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
 	"github.com/crossplane/provider-netbird/internal/features"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
@@ -55,8 +59,13 @@ type NbService struct {
 }
 
 var (
-	newNbService = func(url string, creds string) (*NbService, error) {
-		c := netbird.New(url, creds)
+	newNbService = func(url string, creds string, credType string) (*NbService, error) {
+		var c *netbird.Client
+		if credType == "oauth" {
+			c = netbird.NewWithBearerToken(url, creds)
+		} else {
+			c = netbird.New(url, creds)
+		}
 		return &NbService{nbCli: c}, nil
 	}
 )
@@ -94,7 +103,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 type connector struct {
 	kube         client.Client
 	usage        resource.Tracker
-	newServiceFn func(url string, creds string) (*NbService, error)
+	newServiceFn func(url string, creds string, credsType string) (*NbService, error)
 }
 
 // Connect typically produces an ExternalClient by:
@@ -124,12 +133,20 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	}
 
 	nbManagementEndpoint := pc.Spec.MmanagementURI
-	creds := string(data)
-	svc, err := c.newServiceFn(nbManagementEndpoint, creds)
+	var creds string
+	var err2 error
+	if pc.Spec.CredentialsType == "oauth" {
+		creds, err2 = nbcontrol.GetTokenUsingOauth(string(data), pc.Spec.OauthIssuerUrl)
+		if err2 != nil {
+			return nil, errors.Wrap(err2, errNewClient)
+		}
+	} else {
+		creds = string(data)
+	}
+	svc, err := c.newServiceFn(nbManagementEndpoint, creds, pc.Spec.CredentialsType)
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
-
 	return &external{service: svc}, nil
 }
 
@@ -168,16 +185,13 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		Groups:               nameservergroup.Groups,
 		Enabled:              nameservergroup.Enabled,
 		Name:                 nameservergroup.Name,
-		Nameservers:          *v1alpha1.ApitoNbNameServer(nameservergroup.Nameservers),
+		Nameservers:          *ApitoNbNameServer(nameservergroup.Nameservers),
 		Primary:              nameservergroup.Primary,
 		SearchDomainsEnabled: nameservergroup.SearchDomainsEnabled,
 	}
 
 	cr.Status.SetConditions(xpv1.Available())
-	isUpToDate, err := v1alpha1.IsNbNameServerUpToDate(*nameservergroup, cr.Status.AtProvider)
-	if err != nil {
-		return managed.ExternalObservation{}, err
-	}
+	isUpToDate := IsNbNameServerUpToDate(*nameservergroup, cr.Status.AtProvider)
 	return managed.ExternalObservation{
 		ResourceExists:   true,
 		ResourceUpToDate: isUpToDate,
@@ -197,7 +211,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		Groups:               cr.Spec.ForProvider.Groups,
 		Enabled:              cr.Spec.ForProvider.Enabled,
 		Name:                 cr.Spec.ForProvider.Name,
-		Nameservers:          *v1alpha1.NbtoApiNameServer(cr.Spec.ForProvider.Nameservers),
+		Nameservers:          *NbtoApiNameServer(cr.Spec.ForProvider.Nameservers),
 		Primary:              cr.Spec.ForProvider.Primary,
 		SearchDomainsEnabled: cr.Spec.ForProvider.SearchDomainsEnabled,
 	})
@@ -226,7 +240,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		Groups:               cr.Spec.ForProvider.Groups,
 		Enabled:              cr.Spec.ForProvider.Enabled,
 		Name:                 cr.Spec.ForProvider.Name,
-		Nameservers:          *v1alpha1.NbtoApiNameServer(cr.Spec.ForProvider.Nameservers),
+		Nameservers:          *NbtoApiNameServer(cr.Spec.ForProvider.Nameservers),
 		Primary:              cr.Spec.ForProvider.Primary,
 		SearchDomainsEnabled: cr.Spec.ForProvider.SearchDomainsEnabled,
 	})
@@ -250,4 +264,50 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	c.service.nbCli.DNS.DeleteNameserverGroup(ctx, meta.GetExternalName(cr))
 
 	return nil
+}
+
+func ApitoNbNameServer(p []nbapi.Nameserver) *[]v1alpha1.Nameserver {
+
+	nameservers := make([]v1alpha1.Nameserver, len(p))
+	for i, ns := range p {
+		nameservers[i] = v1alpha1.Nameserver{
+			Ip:     ns.Ip,
+			Port:   ns.Port,
+			NsType: v1alpha1.NameserverNsType(ns.NsType),
+		}
+	}
+	return &nameservers
+}
+func NbtoApiNameServer(p []v1alpha1.Nameserver) *[]nbapi.Nameserver {
+
+	nameservers := make([]nbapi.Nameserver, len(p))
+	for i, ns := range p {
+		nameservers[i] = nbapi.Nameserver{
+			Ip:     ns.Ip,
+			Port:   ns.Port,
+			NsType: nbapi.NameserverNsType(ns.NsType),
+		}
+	}
+	return &nameservers
+}
+func IsNbNameServerUpToDate(p nbapi.NameserverGroup, ns v1alpha1.NbNameServerObservation) bool {
+	if !cmp.Equal(p.Description, ns.Description) {
+		return false
+	}
+	if !cmp.Equal(p.Domains, ns.Domains) {
+		return false
+	}
+	if !cmp.Equal(p.Enabled, ns.Enabled) {
+		return false
+	}
+	if !cmp.Equal(p.Groups, ns.Groups) {
+		return false
+	}
+	if !cmp.Equal(p.Name, ns.Name) {
+		return false
+	}
+	if !cmp.Equal(p.Nameservers, ns.Nameservers) {
+		return false
+	}
+	return true
 }

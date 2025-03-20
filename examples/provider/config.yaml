@@ -1,65 +1,46 @@
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   namespace: crossplane-system
+#   name: example-provider-secret
+# type: Opaque
+# data:
+#   credentials: bmJwX21pUGFLWjY1b2dVOVdGUVVDaE9rU2VVTlFEYzJVSzI0N0Fnbw==
+---
 apiVersion: v1
 kind: Secret
 metadata:
   namespace: crossplane-system
-  name: example-provider-secret
+  name: example-oauth-prov-secret
 type: Opaque
 data:
-  credentials: BASE64-ENC-TOKEN
+  credentials: ewogICAgImNsaWVudF9pZCI6ICJuZXRiaXJkLWFwaS1hZG1pbiIsCiAgICAiY2xpZW50X3NlY3JldCI6ICIyNmFCTzBscFlnN0RadTVpaXd6WlExc1U0SjBvdFpYVUJMMnFkTUoyajUzYjdxM0N2em5UWktzY3Z0MkhxZFJKIiwKICAgICJncmFudF90eXBlIjogImNsaWVudF9jcmVkZW50aWFscyIsCiAgICAic2NvcGUiOiAib3BlbmlkIGVtYWlsIHByb2ZpbGUgdXJuOmlhbTpvcmc6cHJvamVjdDpyb2xlcyB1cm46eml0YWRlbDppYW06b3JnOnByb2plY3RzOnJvbGVzIHVybjp6aXRhZGVsOmlhbTpvcmc6cHJvamVjdDppZDozMTE5ODI3MjUxNTYzMDcyNTk6YXVkIgp9Cg==
 ---
+# apiVersion: netbird.crossplane.io/v1alpha1
+# kind: ProviderConfig
+# metadata:
+#   name: example
+# spec:
+#   management-uri: https://netbird.scaws06.scaws06ccv2.drpp.global:443
+#   credentials-type: token
+#   credentials:
+#     source: Secret
+#     secretRef:
+#       namespace: crossplane-system
+#       name: example-provider-secret
+#       key: credentials
+# ---
 apiVersion: netbird.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
   name: example
 spec:
-  management-uri: https://URL:443
+  management-uri: https://netbird.scaws06.scaws06ccv2.drpp.global:443
+  credentials-type: oauth
+  oauth-issuer-url: https://zitadel.scaws06.scaws06ccv2.drpp.global/oauth/v2/token
   credentials:
     source: Secret
     secretRef:
       namespace: crossplane-system
-      name: example-provider-secret
+      name: example-oauth-prov-secret
       key: credentials
----
-apiVersion: vpn.netbird.crossplane.io/v1alpha1
-kind: NbGroup
-metadata:
-  name: xplanegrouptest
-spec:
-  forProvider:
-    name: xplanegrouptest
-  providerConfigRef:
-    name: example
----
-apiVersion: vpn.netbird.crossplane.io/v1alpha1
-kind: NbAccount
-metadata:
-  name: xplaneaccounttest
-spec:
-  forProvider:
-    settings:
-      extra:
-        peer_approval_enabled: false
-      groups_propagation_enabled: true
-      jwt_allow_groups:
-        - "311697305520572657:techops-admin"
-        - "311697305520572657:techops-users"
-      jwt_groups_claim_name: "zitadel:grants"
-      jwt_groups_enabled: true
-      peer_inactivity_expiration: 0
-      peer_inactivity_expiration_enabled: false
-      peer_login_expiration: 86400
-      peer_login_expiration_enabled: true
-      regular_users_view_blocked: true
-  providerConfigRef:
-    name: example
----
-apiVersion: vpn.netbird.crossplane.io/v1alpha1
-kind: NbDnsSetting
-metadata:
-  name: xplanednssettingtest
-spec:
-  providerConfigRef:
-    name: example
-  forProvider:
-    disabled_management_groups:
-      - cvchr0jn1j0fj63u19m0

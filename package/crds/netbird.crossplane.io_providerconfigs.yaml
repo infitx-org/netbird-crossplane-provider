@@ -103,10 +103,15 @@ spec:
                 required:
                 - source
                 type: object
+              credentials-type:
+                type: string
               management-uri:
+                type: string
+              oauth-issuer-url:
                 type: string
             required:
             - credentials
+            - credentials-type
             - management-uri
             type: object
           status:

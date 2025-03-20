@@ -1,0 +1,11 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbDnsSetting
+metadata:
+  name: xplanednssettingtest
+spec:
+  managementPolicies: ["Observe"]
+  providerConfigRef:
+    name: example
+  forProvider:
+    disabled_management_groups:
+      - cvdrc0f5vea0lnmnlvf0

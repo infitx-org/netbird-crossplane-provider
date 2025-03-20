@@ -19,11 +19,10 @@ package v1alpha1
 import (
 	"reflect"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	netbirdapi "github.com/netbirdio/netbird/management/server/http/api"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // NbAccountParameters are the configurable fields of a NbAccount.
