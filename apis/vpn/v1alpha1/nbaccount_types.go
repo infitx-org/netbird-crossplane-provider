@@ -80,6 +80,7 @@ type AccountSettings struct {
 type NbAccountUser struct {
 	UserEmail string   `json:"user_email"`
 	Groups    []string `json:"user_groups,omitempty"`
+	Role      string   `json:"role"`
 }
 
 // A NbAccountSpec defines the desired state of a NbAccount.

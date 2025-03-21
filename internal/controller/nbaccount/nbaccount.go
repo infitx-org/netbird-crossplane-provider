@@ -303,6 +303,7 @@ func ApitoNbAccountUsers(accountusers []api.User, allgroups []api.Group) *[]v1al
 		nbaccountusers[i] = v1alpha1.NbAccountUser{
 			UserEmail: accountuser.Email,
 			Groups:    *GetGroupIds(accountuser.AutoGroups, allgroups),
+			Role:      accountuser.Role,
 		}
 	}
 	return &nbaccountusers
