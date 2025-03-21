@@ -3,9 +3,13 @@ kind: NbDnsSetting
 metadata:
   name: xplanednssettingtest
 spec:
-  managementPolicies: ["Observe"]
+  managementPolicies:
+    - "Observe"
+    - "Update"
+    - "Create"
+    - "LateInitialize"
   providerConfigRef:
     name: example
   forProvider:
     disabled_management_groups:
-      - cvdrc0f5vea0lnmnlvf0
+      - cvegul5rmbcqv42cb3jg

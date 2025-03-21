@@ -3,7 +3,11 @@ kind: NbUser
 metadata:
   name: xplaneusertest
 spec:
-  managementPolicies: ["Observe"]
+  managementPolicies:
+    - "Observe"
+    - "Update"
+    - "Create"
+    - "LateInitialize"
   providerConfigRef:
     name: example
   forProvider:

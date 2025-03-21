@@ -386,6 +386,19 @@ spec:
                     - peer_login_expiration_enabled
                     - regular_users_view_blocked
                     type: object
+                  user_list:
+                    items:
+                      properties:
+                        user_email:
+                          type: string
+                        user_groups:
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - user_email
+                      type: object
+                    type: array
                 required:
                 - id
                 - settings

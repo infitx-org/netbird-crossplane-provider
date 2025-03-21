@@ -20,7 +20,6 @@ import (
 	"reflect"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	netbirdapi "github.com/netbirdio/netbird/management/server/http/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -34,6 +33,7 @@ type NbAccountParameters struct {
 type NbAccountObservation struct {
 	Id       string          `json:"id"`
 	Settings AccountSettings `json:"settings"`
+	UserList []NbAccountUser `json:"user_list,omitempty"`
 }
 
 // AccountExtraSettings defines model for AccountExtraSettings.
@@ -75,6 +75,11 @@ type AccountSettings struct {
 
 	// RoutingPeerDnsResolutionEnabled Enables or disables DNS resolution on the routing peers
 	RoutingPeerDnsResolutionEnabled *bool `json:"routing_peer_dns_resolution_enabled,omitempty"`
+}
+
+type NbAccountUser struct {
+	UserEmail string   `json:"user_email"`
+	Groups    []string `json:"user_groups,omitempty"`
 }
 
 // A NbAccountSpec defines the desired state of a NbAccount.
@@ -125,38 +130,4 @@ var (
 
 func init() {
 	SchemeBuilder.Register(&NbAccount{}, &NbAccountList{})
-}
-
-func NbToApiAccountSettings(p netbirdapi.AccountSettings) *AccountSettings {
-	accountsettings := AccountSettings{
-		Extra:                           (*AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
-		PeerInactivityExpiration:        p.PeerInactivityExpiration,
-		PeerLoginExpiration:             p.PeerLoginExpiration,
-		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
-		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
-		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
-	}
-	return &accountsettings
-}
-
-func ApitoNbAccountSettings(p AccountSettings) *netbirdapi.AccountSettings {
-	accountsettings := netbirdapi.AccountSettings{
-		Extra:                           (*netbirdapi.AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
-		PeerInactivityExpiration:        p.PeerInactivityExpiration,
-		PeerLoginExpiration:             p.PeerLoginExpiration,
-		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
-		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
-		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
-	}
-	return &accountsettings
 }

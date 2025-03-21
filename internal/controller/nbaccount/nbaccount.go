@@ -29,6 +29,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
+	"github.com/crossplane/crossplane-runtime/pkg/feature"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
@@ -77,8 +78,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		cps = append(cps, connection.NewDetailsManager(mgr.GetClient(), apisv1alpha1.StoreConfigGroupVersionKind))
 	}
 
-	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.NbAccountGroupVersionKind),
+	reconcilerOptions := []managed.ReconcilerOption{
 		managed.WithExternalConnecter(&connector{
 			kube:         mgr.GetClient(),
 			usage:        resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
@@ -86,7 +86,16 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
-		managed.WithConnectionPublishers(cps...))
+		managed.WithConnectionPublishers(cps...),
+	}
+	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
+		reconcilerOptions = append(reconcilerOptions, managed.WithManagementPolicies())
+	}
+
+	r := managed.NewReconciler(mgr,
+		resource.ManagedKind(v1alpha1.NbAccountGroupVersionKind),
+		reconcilerOptions...,
+	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
@@ -172,16 +181,31 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			ResourceExists: false,
 		}, nil
 	}
+	accountusers, err := c.service.nbCli.Users.List(ctx)
+	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil
+	}
+	allgroups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil
+	}
 	account := accounts[0]
 	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
-		Settings: *v1alpha1.NbToApiAccountSettings(account.Settings),
+		Settings: *ApitoNbAccountSettings(account.Settings),
+		UserList: *ApitoNbAccountUsers(accountusers, allgroups),
 	}
 	meta.SetExternalName(cr, account.Id)
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
 		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.Settings, *v1alpha1.NbToApiAccountSettings(account.Settings)),
+		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.Settings, *ApitoNbAccountSettings(account.Settings)),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
@@ -211,7 +235,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if accountId == "" {
 		return managed.ExternalUpdate{}, errors.New("can't find accountid")
 	}
-	accountsettings := v1alpha1.ApitoNbAccountSettings(cr.Status.AtProvider.Settings)
+	accountsettings := NbToApiAccountSettings(cr.Status.AtProvider.Settings)
 	_, err := c.service.nbCli.Accounts.Update(ctx, accountId, api.AccountRequest{
 		Settings: *accountsettings,
 	})
@@ -237,4 +261,62 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	fmt.Printf("Deleting: %+v", cr)
 
 	return nil
+}
+
+func ApitoNbAccountSettings(p api.AccountSettings) *v1alpha1.AccountSettings {
+	accountsettings := v1alpha1.AccountSettings{
+		Extra:                           (*v1alpha1.AccountExtraSettings)(p.Extra),
+		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
+		JwtAllowGroups:                  p.JwtAllowGroups,
+		JwtGroupsClaimName:              p.JwtGroupsClaimName,
+		JwtGroupsEnabled:                p.JwtGroupsEnabled,
+		PeerInactivityExpiration:        p.PeerInactivityExpiration,
+		PeerLoginExpiration:             p.PeerLoginExpiration,
+		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
+		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
+		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
+		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
+	}
+	return &accountsettings
+}
+
+func NbToApiAccountSettings(p v1alpha1.AccountSettings) *api.AccountSettings {
+	accountsettings := api.AccountSettings{
+		Extra:                           (*api.AccountExtraSettings)(p.Extra),
+		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
+		JwtAllowGroups:                  p.JwtAllowGroups,
+		JwtGroupsClaimName:              p.JwtGroupsClaimName,
+		JwtGroupsEnabled:                p.JwtGroupsEnabled,
+		PeerInactivityExpiration:        p.PeerInactivityExpiration,
+		PeerLoginExpiration:             p.PeerLoginExpiration,
+		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
+		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
+		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
+		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
+	}
+	return &accountsettings
+}
+
+func ApitoNbAccountUsers(accountusers []api.User, allgroups []api.Group) *[]v1alpha1.NbAccountUser {
+	nbaccountusers := make([]v1alpha1.NbAccountUser, len(accountusers))
+	for i, accountuser := range accountusers {
+		nbaccountusers[i] = v1alpha1.NbAccountUser{
+			UserEmail: accountuser.Email,
+			Groups:    *GetGroupIds(accountuser.AutoGroups, allgroups),
+		}
+	}
+	return &nbaccountusers
+}
+
+func GetGroupIds(groupids []string, allgroups []api.Group) *[]string {
+	groupnames := make([]string, len(groupids))
+	for i, groupid := range groupids {
+		for _, group := range allgroups {
+			if group.Id == groupid {
+				groupnames[i] = group.Name
+				break
+			}
+		}
+	}
+	return &groupnames
 }
