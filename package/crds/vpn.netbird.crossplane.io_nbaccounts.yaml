@@ -389,6 +389,8 @@ spec:
                   user_list:
                     items:
                       properties:
+                        role:
+                          type: string
                         user_email:
                           type: string
                         user_groups:
@@ -396,6 +398,7 @@ spec:
                             type: string
                           type: array
                       required:
+                      - role
                       - user_email
                       type: object
                     type: array
