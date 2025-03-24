@@ -27,6 +27,7 @@ import (
 // NbUserParameters are the configurable fields of a NbUser.
 type NbUserParameters struct {
 	Email string `json:"email"`
+	Role  string `json:"role,omitempty"`
 }
 
 // NbUserObservation are the observable fields of a NbUser.

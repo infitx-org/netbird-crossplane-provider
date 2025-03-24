@@ -232,12 +232,12 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Updating: %+v", cr)
-	// _, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
-	// 	Role: cr.Spec.ForProvider.Role,
-	// })
-	// if err != nil {
-	// 	return managed.ExternalUpdate{}, err
-	// }
+	_, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
+		Role: cr.Spec.ForProvider.Role,
+	})
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -260,7 +260,7 @@ func IsUserUpToDate(user v1alpha1.NbUserObservation, apiUser nbapi.User) bool {
 	if !cmp.Equal(user.Name, apiUser.Name) {
 		return false
 	}
-	if !cmp.Equal(user.Role, apiUser.Role) {
+	if user.Role != "" && !cmp.Equal(user.Role, apiUser.Role) {
 		return false
 	}
 	return true

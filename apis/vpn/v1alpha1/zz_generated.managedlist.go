@@ -55,6 +55,15 @@ func (l *NbNameServerList) GetItems() []resource.Managed {
 	return items
 }
 
+// GetItems of this NbSetupKeyList.
+func (l *NbSetupKeyList) GetItems() []resource.Managed {
+	items := make([]resource.Managed, len(l.Items))
+	for i := range l.Items {
+		items[i] = &l.Items[i]
+	}
+	return items
+}
+
 // GetItems of this NbUserList.
 func (l *NbUserList) GetItems() []resource.Managed {
 	items := make([]resource.Managed, len(l.Items))

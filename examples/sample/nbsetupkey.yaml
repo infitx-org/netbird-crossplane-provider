@@ -1,0 +1,20 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbSetupKey
+metadata:
+  name: xplanesetupkeytest
+spec:
+  forProvider:
+    name: xplanesetupkeytest
+    allow_extra_dns_labels: false
+    type: reusable
+    expires_in: 86400
+    revoked: false
+    auto_groups:
+      - cvg3emcmo3bc73brmt5g
+    usage_limit: 0
+    ephemeral: false
+  providerConfigRef:
+    name: example
+  writeConnectionSecretToRef:
+    name: setupkeysecret
+    namespace: crossplane-system

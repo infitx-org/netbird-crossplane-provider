@@ -11,4 +11,4 @@ spec:
   providerConfigRef:
     name: example
   forProvider:
-    email: sijo.george@infitx.com
+    email: david@infitx.com
