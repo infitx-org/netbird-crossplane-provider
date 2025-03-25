@@ -11,6 +11,7 @@ on:
 
 env:
   # Common versions
+  GO_VERSION: '1.23'
   DOCKER_BUILDX_VERSION: 'v0.20.1'
   GITHUB_REPOSITORY: 'provider-netbird'
   CLEANUP_DISK: "false"
