@@ -14,18 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nbuser
+package nbaccesstoken
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
@@ -34,22 +34,19 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	apisv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
-	nbcontrol "github.com/crossplane/provider-netbird/internal/controller/nb"
-
 	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
+	nbcontrol "github.com/crossplane/provider-netbird/internal/controller/nb"
 	"github.com/crossplane/provider-netbird/internal/features"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
 )
 
 const (
-	errNotNbUser    = "managed resource is not a NbUser custom resource"
-	errTrackPCUsage = "cannot track ProviderConfig usage"
-	errGetPC        = "cannot get ProviderConfig"
-	errGetCreds     = "cannot get credentials"
+	errNotNbAccessToken = "managed resource is not a NbAccessToken custom resource"
+	errTrackPCUsage     = "cannot track ProviderConfig usage"
+	errGetPC            = "cannot get ProviderConfig"
+	errGetCreds         = "cannot get credentials"
 
 	errNewClient = "cannot create new Service"
 )
@@ -70,9 +67,9 @@ var (
 	}
 )
 
-// Setup adds a controller that reconciles NbUser managed resources.
+// Setup adds a controller that reconciles NbAccessToken managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(v1alpha1.NbUserGroupKind)
+	name := managed.ControllerName(v1alpha1.NbAccessTokenGroupKind)
 
 	cps := []managed.ConnectionPublisher{managed.NewAPISecretPublisher(mgr.GetClient(), mgr.GetScheme())}
 	if o.Features.Enabled(features.EnableAlphaExternalSecretStores) {
@@ -94,7 +91,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	}
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.NbUserGroupVersionKind),
+		resource.ManagedKind(v1alpha1.NbAccessTokenGroupVersionKind),
 		reconcilerOptions...,
 	)
 
@@ -102,7 +99,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
-		For(&v1alpha1.NbUser{}).
+		For(&v1alpha1.NbAccessToken{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -120,9 +117,9 @@ type connector struct {
 // 3. Getting the credentials specified by the ProviderConfig.
 // 4. Using the credentials to form a client.
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.NbUser)
+	cr, ok := mg.(*v1alpha1.NbAccessToken)
 	if !ok {
-		return nil, errors.New(errNotNbUser)
+		return nil, errors.New(errNotNbAccessToken)
 	}
 
 	if err := c.usage.Track(ctx, mg); err != nil {
@@ -154,6 +151,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
+
 	return &external{service: svc}, nil
 }
 
@@ -166,110 +164,97 @@ type external struct {
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mg.(*v1alpha1.NbUser)
+	cr, ok := mg.(*v1alpha1.NbAccessToken)
 	if !ok {
-		return managed.ExternalObservation{}, errors.New(errNotNbUser)
+		return managed.ExternalObservation{}, errors.New(errNotNbAccessToken)
+	}
+
+	// These fmt statements should be removed in the real implementation.
+	fmt.Printf("Observing: %+v", cr)
+	externalName := meta.GetExternalName(cr)
+	if externalName == "" {
+		fmt.Printf("didn't find externalname")
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	users, err := c.service.nbCli.Users.List(ctx)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		fmt.Printf("received error on call to nb for user: %+v", err)
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, err
 	}
-	var apiuser *nbapi.User
-	if !*cr.Spec.ForProvider.IsServiceUser {
-		for _, user := range users {
-			if user.Email == cr.Spec.ForProvider.Email {
-				apiuser = &user
-			}
-		}
-		if apiuser == nil {
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, errors.New("user doesn't exist")
-		}
-	} else {
-		for _, user := range users {
-			if user.Name == cr.Spec.ForProvider.Name {
-				apiuser = &user
-			}
-		}
-		if apiuser == nil {
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, nil
+	var apiuser nbapi.User
+	for _, user := range users {
+		if *user.IsServiceUser && (user.Name == cr.Spec.ForProvider.UserName) {
+			apiuser = user
 		}
 	}
-
-	cr.Status.AtProvider = v1alpha1.NbUserObservation{
-		Id:            apiuser.Id,
-		AutoGroups:    &apiuser.AutoGroups,
-		Email:         apiuser.Email,
-		Role:          apiuser.Role,
-		IsBlocked:     apiuser.IsBlocked,
-		IsCurrent:     apiuser.IsCurrent,
-		IsServiceUser: apiuser.IsServiceUser,
-		Issued:        apiuser.Issued,
-		Name:          apiuser.Name,
-		Permissions: &v1alpha1.UserPermissions{
-			DashboardView: (*v1alpha1.UserPermissionsDashboardView)(apiuser.Permissions.DashboardView),
-		},
-		Status: v1alpha1.UserStatus(apiuser.Status),
+	accesstoken, err := c.service.nbCli.Tokens.Get(ctx, apiuser.Id, externalName)
+	if err != nil {
+		fmt.Printf("received error on call to nb for accesstoken: %+v", accesstoken)
+		fmt.Printf("received error on call to nb for accesstoken: %+v", err)
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil
 	}
-	if !*cr.Spec.ForProvider.IsServiceUser {
-		meta.SetExternalName(cr, apiuser.Id)
-	}
-	uptodate := IsUserUpToDate(cr.Status.AtProvider, *apiuser)
-	cr.Status.SetConditions(xpv1.Available())
-
 	return managed.ExternalObservation{
 		ResourceExists:    true,
-		ResourceUpToDate:  uptodate,
+		ResourceUpToDate:  true, //isUpToDate(&cr.Spec.ForProvider, accesstoken),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
+// func isUpToDate(nbAccessTokenParameters *v1alpha1.NbAccessTokenParameters, accesstoken *nbapi.PersonalAccessToken) bool {
+// 	return true //need to determine how to refresh token when expires
+// }
+
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mg.(*v1alpha1.NbUser)
+	cr, ok := mg.(*v1alpha1.NbAccessToken)
 	if !ok {
-		return managed.ExternalCreation{}, errors.New(errNotNbUser)
+		return managed.ExternalCreation{}, errors.New(errNotNbAccessToken)
 	}
 
 	fmt.Printf("Creating: %+v", cr)
-	if *cr.Spec.ForProvider.IsServiceUser {
-		serviceUser, err := c.service.nbCli.Users.Create(ctx, nbapi.PostApiUsersJSONRequestBody{
-			IsServiceUser: *cr.Spec.ForProvider.IsServiceUser,
-			Name:          &cr.Spec.ForProvider.Name,
-			Role:          cr.Spec.ForProvider.Role,
-			AutoGroups:    *cr.Spec.ForProvider.AutoGroups,
-		})
-		if err != nil {
-			fmt.Printf("received error on call to nb: %+v", err)
-			return managed.ExternalCreation{}, err
+	users, err := c.service.nbCli.Users.List(ctx)
+	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
+		return managed.ExternalCreation{}, err
+	}
+	var apiuser nbapi.User
+	for _, user := range users {
+		if user.Name == cr.Spec.ForProvider.UserName {
+			apiuser = user
 		}
-		meta.SetExternalName(cr, serviceUser.Id)
+	}
+	accesstoken, err := c.service.nbCli.Tokens.Create(ctx, apiuser.Id, nbapi.PersonalAccessTokenRequest{
+		ExpiresIn: cr.Spec.ForProvider.ExpiresIn,
+		Name:      cr.Spec.ForProvider.Name,
+	})
+	if err != nil {
+		fmt.Printf("received error on call to nb : %+v", err)
+		return managed.ExternalCreation{}, err
+	}
+	fmt.Printf("accesstoken created: %+v", accesstoken)
+	meta.SetExternalName(cr, accesstoken.PersonalAccessToken.Id)
+
+	cd := managed.ConnectionDetails{
+		xpv1.ResourceCredentialsSecretPasswordKey: []byte(accesstoken.PlainToken),
 	}
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
-		ConnectionDetails: managed.ConnectionDetails{},
+		ConnectionDetails: cd,
 	}, nil
 }
 
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mg.(*v1alpha1.NbUser)
+	cr, ok := mg.(*v1alpha1.NbAccessToken)
 	if !ok {
-		return managed.ExternalUpdate{}, errors.New(errNotNbUser)
+		return managed.ExternalUpdate{}, errors.New(errNotNbAccessToken)
 	}
 
 	fmt.Printf("Updating: %+v", cr)
-	_, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
-		Role: cr.Spec.ForProvider.Role,
-	})
-	if err != nil {
-		return managed.ExternalUpdate{}, err
-	}
+
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -278,29 +263,30 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 }
 
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*v1alpha1.NbUser)
+	cr, ok := mg.(*v1alpha1.NbAccessToken)
 	if !ok {
-		return errors.New(errNotNbUser)
+		return errors.New(errNotNbAccessToken)
 	}
-
+	externalName := meta.GetExternalName(cr)
+	if externalName == "" {
+		return errors.New("no externalname found")
+	}
 	fmt.Printf("Deleting: %+v", cr)
-	if *cr.Spec.ForProvider.IsServiceUser {
-		err := c.service.nbCli.Users.Delete(ctx, meta.GetExternalName(cr))
-		if err != nil {
-			return err
+	users, err := c.service.nbCli.Users.List(ctx)
+	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
+		return err
+	}
+	var apiuser nbapi.User
+	for _, user := range users {
+		if user.Name == cr.Spec.ForProvider.UserName {
+			apiuser = user
 		}
+	}
+	err = c.service.nbCli.Tokens.Delete(ctx, apiuser.Id, externalName)
+	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
+		return err
 	}
 	return nil
-}
-
-func IsUserUpToDate(user v1alpha1.NbUserObservation, apiUser nbapi.User) bool {
-	if *user.IsServiceUser {
-		if !cmp.Equal(user.Name, apiUser.Name) {
-			return false
-		}
-	}
-	if user.Role != "" && !cmp.Equal(user.Role, apiUser.Role) {
-		return false
-	}
-	return true
 }

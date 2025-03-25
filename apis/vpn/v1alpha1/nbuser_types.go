@@ -26,14 +26,17 @@ import (
 
 // NbUserParameters are the configurable fields of a NbUser.
 type NbUserParameters struct {
-	Email string `json:"email"`
-	Role  string `json:"role,omitempty"`
+	Email         string    `json:"email,omitempty"`
+	Name          string    `json:"name,omitempty"`
+	Role          string    `json:"role,omitempty"`
+	IsServiceUser *bool     `json:"is_service_user,omitempty"`
+	AutoGroups    *[]string `json:"auto_groups,omitempty"`
 }
 
 // NbUserObservation are the observable fields of a NbUser.
 type NbUserObservation struct {
 	// AutoGroups Group IDs to auto-assign to peers registered by this user
-	AutoGroups []string `json:"auto_groups"`
+	AutoGroups *[]string `json:"auto_groups,omitempty"`
 
 	// Email User's email address
 	Email string `json:"email"`

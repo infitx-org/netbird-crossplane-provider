@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: nbusers.vpn.netbird.crossplane.io
+  name: nbnetworks.vpn.netbird.crossplane.io
 spec:
   group: vpn.netbird.crossplane.io
   names:
@@ -12,10 +12,10 @@ spec:
     - crossplane
     - managed
     - netbird
-    kind: NbUser
-    listKind: NbUserList
-    plural: nbusers
-    singular: nbuser
+    kind: NbNetwork
+    listKind: NbNetworkList
+    plural: nbnetworks
+    singular: nbnetwork
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -34,7 +34,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A NbUser is an example API type.
+        description: A NbNetwork is an example API type.
         properties:
           apiVersion:
             description: |-
@@ -54,7 +54,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: A NbUserSpec defines the desired state of a NbUser.
+            description: A NbNetworkSpec defines the desired state of a NbNetwork.
             properties:
               deletionPolicy:
                 default: Delete
@@ -71,20 +71,15 @@ spec:
                 - Delete
                 type: string
               forProvider:
-                description: NbUserParameters are the configurable fields of a NbUser.
+                description: NbNetworkParameters are the configurable fields of a
+                  NbNetwork.
                 properties:
-                  auto_groups:
-                    items:
-                      type: string
-                    type: array
-                  email:
+                  description:
                     type: string
-                  is_service_user:
-                    type: boolean
                   name:
                     type: string
-                  role:
-                    type: string
+                required:
+                - name
                 type: object
               managementPolicies:
                 default:
@@ -254,59 +249,47 @@ spec:
             - forProvider
             type: object
           status:
-            description: A NbUserStatus represents the observed state of a NbUser.
+            description: A NbNetworkStatus represents the observed state of a NbNetwork.
             properties:
               atProvider:
-                description: NbUserObservation are the observable fields of a NbUser.
+                description: NbNetworkObservation are the observable fields of a NbNetwork.
                 properties:
-                  auto_groups:
-                    description: AutoGroups Group IDs to auto-assign to peers registered
-                      by this user
+                  description:
+                    description: Description Network description
+                    type: string
+                  id:
+                    description: Id Network ID
+                    type: string
+                  name:
+                    description: Name Network name
+                    type: string
+                  policies:
+                    description: Policies List of policy IDs associated with the network
                     items:
                       type: string
                     type: array
-                  email:
-                    description: Email User's email address
-                    type: string
-                  id:
-                    description: Id User ID
-                    type: string
-                  is_blocked:
-                    description: IsBlocked Is true if this user is blocked. Blocked
-                      users can't use the system
-                    type: boolean
-                  is_current:
-                    description: IsCurrent Is true if authenticated user is the same
-                      as this user
-                    type: boolean
-                  is_service_user:
-                    description: IsServiceUser Is true if this user is a service user
-                    type: boolean
-                  issued:
-                    description: Issued How user was issued by API or Integration
-                    type: string
-                  name:
-                    description: Name User's name from idp provider
-                    type: string
-                  permissions:
-                    properties:
-                      dashboard_view:
-                        description: DashboardView User's permission to view the dashboard
-                        type: string
-                    type: object
-                  role:
-                    description: Role User's NetBird account role
-                    type: string
-                  status:
-                    description: Status User's status
-                    type: string
+                  resources:
+                    description: Resources List of network resource IDs associated
+                      with the network
+                    items:
+                      type: string
+                    type: array
+                  routers:
+                    description: Routers List of router IDs associated with the network
+                    items:
+                      type: string
+                    type: array
+                  routing_peers_count:
+                    description: RoutingPeersCount Count of routing peers associated
+                      with the network
+                    type: integer
                 required:
-                - email
                 - id
-                - is_blocked
                 - name
-                - role
-                - status
+                - policies
+                - resources
+                - routers
+                - routing_peers_count
                 type: object
               conditions:
                 description: Conditions of the resource.

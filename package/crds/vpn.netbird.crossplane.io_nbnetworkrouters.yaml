@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: nbusers.vpn.netbird.crossplane.io
+  name: nbnetworkrouters.vpn.netbird.crossplane.io
 spec:
   group: vpn.netbird.crossplane.io
   names:
@@ -12,10 +12,10 @@ spec:
     - crossplane
     - managed
     - netbird
-    kind: NbUser
-    listKind: NbUserList
-    plural: nbusers
-    singular: nbuser
+    kind: NbNetworkRouter
+    listKind: NbNetworkRouterList
+    plural: nbnetworkrouters
+    singular: nbnetworkrouter
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -34,7 +34,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A NbUser is an example API type.
+        description: A NbNetworkRouter is an example API type.
         properties:
           apiVersion:
             description: |-
@@ -54,7 +54,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: A NbUserSpec defines the desired state of a NbUser.
+            description: A NbNetworkRouterSpec defines the desired state of a NbNetworkRouter.
             properties:
               deletionPolicy:
                 default: Delete
@@ -71,20 +71,34 @@ spec:
                 - Delete
                 type: string
               forProvider:
-                description: NbUserParameters are the configurable fields of a NbUser.
+                description: NbNetworkRouterParameters are the configurable fields
+                  of a NbNetworkRouter.
                 properties:
-                  auto_groups:
+                  enabled:
+                    description: Enabled Network router status
+                    type: boolean
+                  masquerade:
+                    description: Masquerade Indicate if peer should masquerade traffic
+                      to this route's prefix
+                    type: boolean
+                  metric:
+                    description: Metric Route metric number. Lowest number has higher
+                      priority
+                    type: integer
+                  peer:
+                    description: Peer Peer Identifier associated with route. This
+                      property can not be set together with `peer_groups`
+                    type: string
+                  peer_groups:
+                    description: PeerGroups Peers Group Identifier associated with
+                      route. This property can not be set together with `peer`
                     items:
                       type: string
                     type: array
-                  email:
-                    type: string
-                  is_service_user:
-                    type: boolean
-                  name:
-                    type: string
-                  role:
-                    type: string
+                required:
+                - enabled
+                - masquerade
+                - metric
                 type: object
               managementPolicies:
                 default:
@@ -254,59 +268,42 @@ spec:
             - forProvider
             type: object
           status:
-            description: A NbUserStatus represents the observed state of a NbUser.
+            description: A NbNetworkRouterStatus represents the observed state of
+              a NbNetworkRouter.
             properties:
               atProvider:
-                description: NbUserObservation are the observable fields of a NbUser.
+                description: NbNetworkRouterObservation are the observable fields
+                  of a NbNetworkRouter.
                 properties:
-                  auto_groups:
-                    description: AutoGroups Group IDs to auto-assign to peers registered
-                      by this user
+                  enabled:
+                    description: Enabled Network router status
+                    type: boolean
+                  id:
+                    description: Id Network Router Id
+                    type: string
+                  masquerade:
+                    description: Masquerade Indicate if peer should masquerade traffic
+                      to this route's prefix
+                    type: boolean
+                  metric:
+                    description: Metric Route metric number. Lowest number has higher
+                      priority
+                    type: integer
+                  peer:
+                    description: Peer Peer Identifier associated with route. This
+                      property can not be set together with `peer_groups`
+                    type: string
+                  peer_groups:
+                    description: PeerGroups Peers Group Identifier associated with
+                      route. This property can not be set together with `peer`
                     items:
                       type: string
                     type: array
-                  email:
-                    description: Email User's email address
-                    type: string
-                  id:
-                    description: Id User ID
-                    type: string
-                  is_blocked:
-                    description: IsBlocked Is true if this user is blocked. Blocked
-                      users can't use the system
-                    type: boolean
-                  is_current:
-                    description: IsCurrent Is true if authenticated user is the same
-                      as this user
-                    type: boolean
-                  is_service_user:
-                    description: IsServiceUser Is true if this user is a service user
-                    type: boolean
-                  issued:
-                    description: Issued How user was issued by API or Integration
-                    type: string
-                  name:
-                    description: Name User's name from idp provider
-                    type: string
-                  permissions:
-                    properties:
-                      dashboard_view:
-                        description: DashboardView User's permission to view the dashboard
-                        type: string
-                    type: object
-                  role:
-                    description: Role User's NetBird account role
-                    type: string
-                  status:
-                    description: Status User's status
-                    type: string
                 required:
-                - email
+                - enabled
                 - id
-                - is_blocked
-                - name
-                - role
-                - status
+                - masquerade
+                - metric
                 type: object
               conditions:
                 description: Conditions of the resource.

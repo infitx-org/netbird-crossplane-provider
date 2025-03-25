@@ -19,6 +19,15 @@ package v1alpha1
 
 import resource "github.com/crossplane/crossplane-runtime/pkg/resource"
 
+// GetItems of this NbAccessTokenList.
+func (l *NbAccessTokenList) GetItems() []resource.Managed {
+	items := make([]resource.Managed, len(l.Items))
+	for i := range l.Items {
+		items[i] = &l.Items[i]
+	}
+	return items
+}
+
 // GetItems of this NbAccountList.
 func (l *NbAccountList) GetItems() []resource.Managed {
 	items := make([]resource.Managed, len(l.Items))
@@ -48,6 +57,33 @@ func (l *NbGroupList) GetItems() []resource.Managed {
 
 // GetItems of this NbNameServerList.
 func (l *NbNameServerList) GetItems() []resource.Managed {
+	items := make([]resource.Managed, len(l.Items))
+	for i := range l.Items {
+		items[i] = &l.Items[i]
+	}
+	return items
+}
+
+// GetItems of this NbNetworkList.
+func (l *NbNetworkList) GetItems() []resource.Managed {
+	items := make([]resource.Managed, len(l.Items))
+	for i := range l.Items {
+		items[i] = &l.Items[i]
+	}
+	return items
+}
+
+// GetItems of this NbNetworkResourceList.
+func (l *NbNetworkResourceList) GetItems() []resource.Managed {
+	items := make([]resource.Managed, len(l.Items))
+	for i := range l.Items {
+		items[i] = &l.Items[i]
+	}
+	return items
+}
+
+// GetItems of this NbNetworkRouterList.
+func (l *NbNetworkRouterList) GetItems() []resource.Managed {
 	items := make([]resource.Managed, len(l.Items))
 	for i := range l.Items {
 		items[i] = &l.Items[i]
