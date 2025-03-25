@@ -14,18 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nbaccount
+package nbnetworkrouter
 
 import (
 	"context"
 	"fmt"
-	"reflect"
 
-	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
+	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
@@ -34,21 +29,23 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	apisv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
 	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/provider-netbird/internal/controller/nb"
 	"github.com/crossplane/provider-netbird/internal/features"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
-	"github.com/netbirdio/netbird/management/server/http/api"
+	nbapi "github.com/netbirdio/netbird/management/server/http/api"
+	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	errNotNbAccount = "managed resource is not a NbAccount custom resource"
-	errTrackPCUsage = "cannot track ProviderConfig usage"
-	errGetPC        = "cannot get ProviderConfig"
-	errGetCreds     = "cannot get credentials"
+	errNotNbNetworkRouter = "managed resource is not a NbNetworkRouter custom resource"
+	errTrackPCUsage       = "cannot track ProviderConfig usage"
+	errGetPC              = "cannot get ProviderConfig"
+	errGetCreds           = "cannot get credentials"
 
 	errNewClient = "cannot create new Service"
 )
@@ -69,9 +66,9 @@ var (
 	}
 )
 
-// Setup adds a controller that reconciles NbAccount managed resources.
+// Setup adds a controller that reconciles NbNetworkRouter managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(v1alpha1.NbAccountGroupKind)
+	name := managed.ControllerName(v1alpha1.NbNetworkRouterGroupKind)
 
 	cps := []managed.ConnectionPublisher{managed.NewAPISecretPublisher(mgr.GetClient(), mgr.GetScheme())}
 	if o.Features.Enabled(features.EnableAlphaExternalSecretStores) {
@@ -93,15 +90,14 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	}
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.NbAccountGroupVersionKind),
+		resource.ManagedKind(v1alpha1.NbNetworkRouterGroupVersionKind),
 		reconcilerOptions...,
 	)
-
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
-		For(&v1alpha1.NbAccount{}).
+		For(&v1alpha1.NbNetworkRouter{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -119,9 +115,9 @@ type connector struct {
 // 3. Getting the credentials specified by the ProviderConfig.
 // 4. Using the credentials to form a client.
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbNetworkRouter)
 	if !ok {
-		return nil, errors.New(errNotNbAccount)
+		return nil, errors.New(errNotNbNetworkRouter)
 	}
 
 	if err := c.usage.Track(ctx, mg); err != nil {
@@ -138,7 +134,6 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errGetCreds)
 	}
-
 	nbManagementEndpoint := pc.Spec.MmanagementURI
 	var creds string
 	var err2 error
@@ -154,6 +149,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
+
 	return &external{service: svc}, nil
 }
 
@@ -166,83 +162,93 @@ type external struct {
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbNetworkRouter)
 	if !ok {
-		return managed.ExternalObservation{}, errors.New(errNotNbAccount)
+		return managed.ExternalObservation{}, errors.New(errNotNbNetworkRouter)
+	}
+	externalName := meta.GetExternalName(cr)
+	if externalName == "" {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+	networks, err := c.service.nbCli.Networks.List(ctx)
+	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil //return nil so that observe can return without error so that it passes to create.
+	}
+	var apinetwork *nbapi.Network
+	for _, network := range networks {
+		if network.Name == cr.Spec.ForProvider.NetworkName {
+			apinetwork = &network
+		}
+	}
+	networkrouter, err := c.service.nbCli.Networks.Routers(apinetwork.Id).Get(ctx, externalName)
+	if err != nil {
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, err
+	}
+	cr.Status.AtProvider = v1alpha1.NbNetworkRouterObservation{
+		Id:         networkrouter.Id,
+		Enabled:    networkrouter.Enabled,
+		Masquerade: networkrouter.Masquerade,
+		Metric:     networkrouter.Metric,
+		PeerGroups: networkrouter.PeerGroups,
+		Peer:       networkrouter.Peer,
 	}
 
-	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
-	//list accounts always returns the only account
-	accounts, err := c.service.nbCli.Accounts.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil
-	}
-	accountusers, err := c.service.nbCli.Users.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil
-	}
-	allgroups, err := c.service.nbCli.Groups.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil
-	}
-	account := accounts[0]
-	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
-		Settings: *ApitoNbAccountSettings(account.Settings),
-		UserList: *ApitoNbAccountUsers(accountusers, allgroups),
-	}
-	meta.SetExternalName(cr, account.Id)
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
-		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.Settings, *ApitoNbAccountSettings(account.Settings)),
-		ConnectionDetails: managed.ConnectionDetails{},
+		ResourceExists:   true,
+		ResourceUpToDate: true,
 	}, nil
 }
 
-// this method should never be called since we don't create the account, only update settings
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbNetworkRouter)
 	if !ok {
-		return managed.ExternalCreation{}, errors.New(errNotNbAccount)
+		return managed.ExternalCreation{}, errors.New(errNotNbNetworkRouter)
 	}
-	fmt.Printf("Creating: %+v", cr)
-	return managed.ExternalCreation{
-		// Optionally return any details that may be required to connect to the
-		// external resource. These will be stored as the connection secret.
-		ConnectionDetails: managed.ConnectionDetails{},
-	}, nil
-}
-
-func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
-	if !ok {
-		return managed.ExternalUpdate{}, errors.New(errNotNbAccount)
+	networks, err := c.service.nbCli.Networks.List(ctx)
+	if err != nil {
+		return managed.ExternalCreation{}, err
 	}
-
-	fmt.Printf("Updating: %+v", cr)
-	accountId := meta.GetExternalName(cr)
-	if accountId == "" {
-		return managed.ExternalUpdate{}, errors.New("can't find accountid")
+	var apinetwork *nbapi.Network
+	for _, network := range networks {
+		if network.Name == cr.Spec.ForProvider.NetworkName {
+			apinetwork = &network
+		}
 	}
-	accountsettings := NbToApiAccountSettings(cr.Status.AtProvider.Settings)
-	_, err := c.service.nbCli.Accounts.Update(ctx, accountId, api.AccountRequest{
-		Settings: *accountsettings,
+	networkrouter, err := c.service.nbCli.Networks.Routers(apinetwork.Id).Create(ctx, nbapi.NetworkRouterRequest{
+		Enabled:    cr.Spec.ForProvider.Enabled,
+		Masquerade: cr.Spec.ForProvider.Masquerade,
+		Metric:     cr.Spec.ForProvider.Metric,
+		Peer:       cr.Spec.ForProvider.Peer,
+		PeerGroups: cr.Spec.ForProvider.PeerGroups,
 	})
 
 	if err != nil {
-		return managed.ExternalUpdate{}, err
+		fmt.Printf("err creating networkrouter: %+v", err)
+		return managed.ExternalCreation{}, err
 	}
+	fmt.Printf("network created: %+v", networkrouter)
+	meta.SetExternalName(cr, networkrouter.Id)
+	return managed.ExternalCreation{}, nil
+}
+
+func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
+	cr, ok := mg.(*v1alpha1.NbNetworkRouter)
+	if !ok {
+		return managed.ExternalUpdate{}, errors.New(errNotNbNetworkRouter)
+	}
+	//networkid := meta.GetExternalName(cr)
+	fmt.Printf("Updating: %+v", cr)
+	//todo
+	// if err != nil {
+	// 	return managed.ExternalUpdate{}, err
+	// }
 
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
@@ -251,73 +257,23 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
-// this method should never be called since we don't create/delete the account, only update settings
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbNetworkRouter)
 	if !ok {
-		return errors.New(errNotNbAccount)
+		return errors.New(errNotNbNetworkRouter)
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
-
-	return nil
-}
-
-func ApitoNbAccountSettings(p api.AccountSettings) *v1alpha1.AccountSettings {
-	accountsettings := v1alpha1.AccountSettings{
-		Extra:                           (*v1alpha1.AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
-		PeerInactivityExpiration:        p.PeerInactivityExpiration,
-		PeerLoginExpiration:             p.PeerLoginExpiration,
-		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
-		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
-		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
+	networks, err := c.service.nbCli.Networks.List(ctx)
+	if err != nil {
+		return err
 	}
-	return &accountsettings
-}
-
-func NbToApiAccountSettings(p v1alpha1.AccountSettings) *api.AccountSettings {
-	accountsettings := api.AccountSettings{
-		Extra:                           (*api.AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
-		PeerInactivityExpiration:        p.PeerInactivityExpiration,
-		PeerLoginExpiration:             p.PeerLoginExpiration,
-		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
-		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
-		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
-	}
-	return &accountsettings
-}
-
-func ApitoNbAccountUsers(accountusers []api.User, allgroups []api.Group) *[]v1alpha1.NbAccountUser {
-	nbaccountusers := make([]v1alpha1.NbAccountUser, len(accountusers))
-	for i, accountuser := range accountusers {
-		nbaccountusers[i] = v1alpha1.NbAccountUser{
-			UserEmail: accountuser.Email,
-			Groups:    *GetGroupIds(accountuser.AutoGroups, allgroups),
-			Role:      accountuser.Role,
+	var apinetwork *nbapi.Network
+	for _, network := range networks {
+		if network.Name == cr.Spec.ForProvider.NetworkName {
+			apinetwork = &network
 		}
 	}
-	return &nbaccountusers
-}
-
-func GetGroupIds(groupids []string, allgroups []api.Group) *[]string {
-	groupnames := make([]string, len(groupids))
-	for i, groupid := range groupids {
-		for _, group := range allgroups {
-			if group.Id == groupid {
-				groupnames[i] = group.Name
-				break
-			}
-		}
-	}
-	return &groupnames
+	networkrouterid := meta.GetExternalName(cr)
+	return c.service.nbCli.Networks.Routers(apinetwork.Id).Delete(ctx, networkrouterid)
 }

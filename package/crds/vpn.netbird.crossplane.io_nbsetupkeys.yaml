@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: nbusers.vpn.netbird.crossplane.io
+  name: nbsetupkeys.vpn.netbird.crossplane.io
 spec:
   group: vpn.netbird.crossplane.io
   names:
@@ -12,10 +12,10 @@ spec:
     - crossplane
     - managed
     - netbird
-    kind: NbUser
-    listKind: NbUserList
-    plural: nbusers
-    singular: nbuser
+    kind: NbSetupKey
+    listKind: NbSetupKeyList
+    plural: nbsetupkeys
+    singular: nbsetupkey
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -34,7 +34,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A NbUser is an example API type.
+        description: A NbSetupKey is an example API type.
         properties:
           apiVersion:
             description: |-
@@ -54,7 +54,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: A NbUserSpec defines the desired state of a NbUser.
+            description: A NbSetupKeySpec defines the desired state of a NbSetupKey.
             properties:
               deletionPolicy:
                 default: Delete
@@ -71,20 +71,48 @@ spec:
                 - Delete
                 type: string
               forProvider:
-                description: NbUserParameters are the configurable fields of a NbUser.
+                description: NbSetupKeyParameters are the configurable fields of a
+                  NbSetupKey.
                 properties:
+                  allow_extra_dns_labels:
+                    description: AllowExtraDnsLabels Allow extra DNS labels to be
+                      added to the peer
+                    type: boolean
                   auto_groups:
+                    description: AutoGroups List of group IDs to auto-assign to peers
+                      registered with this key
                     items:
                       type: string
                     type: array
-                  email:
-                    type: string
-                  is_service_user:
+                  ephemeral:
+                    description: Ephemeral Indicate that the peer will be ephemeral
+                      or not
                     type: boolean
+                  expires_in:
+                    description: Expires Setup Key expiration date
+                    type: integer
                   name:
+                    description: Name Setup key name identifier
                     type: string
-                  role:
+                  revoked:
+                    type: boolean
+                  type:
+                    description: Type Setup key type, one-off for single time usage
+                      and reusable
                     type: string
+                  usage_limit:
+                    description: UsageLimit A number of times this key can be used.
+                      The value of 0 indicates the unlimited usage.
+                    type: integer
+                required:
+                - allow_extra_dns_labels
+                - auto_groups
+                - ephemeral
+                - expires_in
+                - name
+                - revoked
+                - type
+                - usage_limit
                 type: object
               managementPolicies:
                 default:
@@ -254,59 +282,76 @@ spec:
             - forProvider
             type: object
           status:
-            description: A NbUserStatus represents the observed state of a NbUser.
+            description: A NbSetupKeyStatus represents the observed state of a NbSetupKey.
             properties:
               atProvider:
-                description: NbUserObservation are the observable fields of a NbUser.
+                description: NbSetupKeyObservation are the observable fields of a
+                  NbSetupKey.
                 properties:
+                  allow_extra_dns_labels:
+                    description: AllowExtraDnsLabels Allow extra DNS labels to be
+                      added to the peer
+                    type: boolean
                   auto_groups:
-                    description: AutoGroups Group IDs to auto-assign to peers registered
-                      by this user
+                    description: AutoGroups List of group IDs to auto-assign to peers
+                      registered with this key
                     items:
                       type: string
                     type: array
-                  email:
-                    description: Email User's email address
+                  ephemeral:
+                    description: Ephemeral Indicate that the peer will be ephemeral
+                      or not
+                    type: boolean
+                  expires:
                     type: string
                   id:
-                    description: Id User ID
+                    description: Id Setup Key ID
                     type: string
-                  is_blocked:
-                    description: IsBlocked Is true if this user is blocked. Blocked
-                      users can't use the system
-                    type: boolean
-                  is_current:
-                    description: IsCurrent Is true if authenticated user is the same
-                      as this user
-                    type: boolean
-                  is_service_user:
-                    description: IsServiceUser Is true if this user is a service user
-                    type: boolean
-                  issued:
-                    description: Issued How user was issued by API or Integration
+                  last_used:
+                    description: LastUsed Setup key last usage date
                     type: string
                   name:
-                    description: Name User's name from idp provider
+                    description: Name Setup key name identifier
                     type: string
-                  permissions:
-                    properties:
-                      dashboard_view:
-                        description: DashboardView User's permission to view the dashboard
-                        type: string
-                    type: object
-                  role:
-                    description: Role User's NetBird account role
+                  revoked:
+                    description: Revoked Setup key revocation status
+                    type: boolean
+                  state:
+                    description: State Setup key status, "valid", "overused","expired"
+                      or "revoked"
                     type: string
-                  status:
-                    description: Status User's status
+                  type:
+                    description: Type Setup key type, one-off for single time usage
+                      and reusable
                     type: string
+                  updated_at:
+                    description: UpdatedAt Setup key last update date
+                    type: string
+                  usage_limit:
+                    description: UsageLimit A number of times this key can be used.
+                      The value of 0 indicates the unlimited usage.
+                    type: integer
+                  used_times:
+                    description: UsedTimes Usage count of setup key
+                    type: integer
+                  valid:
+                    description: Valid Setup key validity status
+                    type: boolean
                 required:
-                - email
+                - allow_extra_dns_labels
+                - auto_groups
+                - ephemeral
+                - expires
                 - id
-                - is_blocked
+                - last_used
                 - name
-                - role
-                - status
+                - revoked
+                - state
+                - type
+                - updated_at
+                - usage_limit
+                - used_times
+                - valid
                 type: object
               conditions:
                 description: Conditions of the resource.

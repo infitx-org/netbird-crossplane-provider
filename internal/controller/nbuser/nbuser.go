@@ -177,15 +177,34 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			ResourceExists: false,
 		}, err
 	}
-	var apiuser nbapi.User
-	for _, user := range users {
-		if user.Email == cr.Spec.ForProvider.Email {
-			apiuser = user
+	var apiuser *nbapi.User
+	if !*cr.Spec.ForProvider.IsServiceUser {
+		for _, user := range users {
+			if user.Email == cr.Spec.ForProvider.Email {
+				apiuser = &user
+			}
+		}
+		if apiuser == nil {
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, errors.New("user doesn't exist")
+		}
+	} else {
+		for _, user := range users {
+			if user.Name == cr.Spec.ForProvider.Name {
+				apiuser = &user
+			}
+		}
+		if apiuser == nil {
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil
 		}
 	}
+
 	cr.Status.AtProvider = v1alpha1.NbUserObservation{
 		Id:            apiuser.Id,
-		AutoGroups:    apiuser.AutoGroups,
+		AutoGroups:    &apiuser.AutoGroups,
 		Email:         apiuser.Email,
 		Role:          apiuser.Role,
 		IsBlocked:     apiuser.IsBlocked,
@@ -198,8 +217,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		},
 		Status: v1alpha1.UserStatus(apiuser.Status),
 	}
-	meta.SetExternalName(cr, apiuser.Id)
-	uptodate := IsUserUpToDate(cr.Status.AtProvider, apiuser)
+	if !*cr.Spec.ForProvider.IsServiceUser {
+		meta.SetExternalName(cr, apiuser.Id)
+	}
+	uptodate := IsUserUpToDate(cr.Status.AtProvider, *apiuser)
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
@@ -209,7 +230,6 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}, nil
 }
 
-// no create
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr, ok := mg.(*v1alpha1.NbUser)
 	if !ok {
@@ -217,7 +237,19 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Creating: %+v", cr)
-
+	if *cr.Spec.ForProvider.IsServiceUser {
+		serviceUser, err := c.service.nbCli.Users.Create(ctx, nbapi.PostApiUsersJSONRequestBody{
+			IsServiceUser: *cr.Spec.ForProvider.IsServiceUser,
+			Name:          &cr.Spec.ForProvider.Name,
+			Role:          cr.Spec.ForProvider.Role,
+			AutoGroups:    *cr.Spec.ForProvider.AutoGroups,
+		})
+		if err != nil {
+			fmt.Printf("received error on call to nb: %+v", err)
+			return managed.ExternalCreation{}, err
+		}
+		meta.SetExternalName(cr, serviceUser.Id)
+	}
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -232,12 +264,12 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Updating: %+v", cr)
-	// _, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
-	// 	Role: cr.Spec.ForProvider.Role,
-	// })
-	// if err != nil {
-	// 	return managed.ExternalUpdate{}, err
-	// }
+	_, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
+		Role: cr.Spec.ForProvider.Role,
+	})
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -252,15 +284,22 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
-
+	if *cr.Spec.ForProvider.IsServiceUser {
+		err := c.service.nbCli.Users.Delete(ctx, meta.GetExternalName(cr))
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func IsUserUpToDate(user v1alpha1.NbUserObservation, apiUser nbapi.User) bool {
-	if !cmp.Equal(user.Name, apiUser.Name) {
-		return false
+	if *user.IsServiceUser {
+		if !cmp.Equal(user.Name, apiUser.Name) {
+			return false
+		}
 	}
-	if !cmp.Equal(user.Role, apiUser.Role) {
+	if user.Role != "" && !cmp.Equal(user.Role, apiUser.Role) {
 		return false
 	}
 	return true

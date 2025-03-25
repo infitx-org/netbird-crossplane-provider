@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nbaccount
+package nbsetupkey
 
 import (
 	"context"
 	"fmt"
 	"reflect"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -45,10 +46,10 @@ import (
 )
 
 const (
-	errNotNbAccount = "managed resource is not a NbAccount custom resource"
-	errTrackPCUsage = "cannot track ProviderConfig usage"
-	errGetPC        = "cannot get ProviderConfig"
-	errGetCreds     = "cannot get credentials"
+	errNotNbSetupKey = "managed resource is not a NbSetupKey custom resource"
+	errTrackPCUsage  = "cannot track ProviderConfig usage"
+	errGetPC         = "cannot get ProviderConfig"
+	errGetCreds      = "cannot get credentials"
 
 	errNewClient = "cannot create new Service"
 )
@@ -69,9 +70,9 @@ var (
 	}
 )
 
-// Setup adds a controller that reconciles NbAccount managed resources.
+// Setup adds a controller that reconciles NbSetupKey managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(v1alpha1.NbAccountGroupKind)
+	name := managed.ControllerName(v1alpha1.NbSetupKeyGroupKind)
 
 	cps := []managed.ConnectionPublisher{managed.NewAPISecretPublisher(mgr.GetClient(), mgr.GetScheme())}
 	if o.Features.Enabled(features.EnableAlphaExternalSecretStores) {
@@ -93,7 +94,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	}
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.NbAccountGroupVersionKind),
+		resource.ManagedKind(v1alpha1.NbSetupKeyGroupVersionKind),
 		reconcilerOptions...,
 	)
 
@@ -101,7 +102,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
 		WithEventFilter(resource.DesiredStateChanged()).
-		For(&v1alpha1.NbAccount{}).
+		For(&v1alpha1.NbSetupKey{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
@@ -119,9 +120,9 @@ type connector struct {
 // 3. Getting the credentials specified by the ProviderConfig.
 // 4. Using the credentials to form a client.
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbSetupKey)
 	if !ok {
-		return nil, errors.New(errNotNbAccount)
+		return nil, errors.New(errNotNbSetupKey)
 	}
 
 	if err := c.usage.Track(ctx, mg); err != nil {
@@ -138,7 +139,6 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errGetCreds)
 	}
-
 	nbManagementEndpoint := pc.Spec.MmanagementURI
 	var creds string
 	var err2 error
@@ -166,84 +166,109 @@ type external struct {
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbSetupKey)
 	if !ok {
-		return managed.ExternalObservation{}, errors.New(errNotNbAccount)
+		return managed.ExternalObservation{}, errors.New(errNotNbSetupKey)
+	}
+	externalName := meta.GetExternalName(cr)
+	if externalName == "" {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+	setupkey, err := c.service.nbCli.SetupKeys.Get(ctx, externalName)
+	if err != nil {
+		fmt.Printf("received error on call to nb: %+v", err)
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 
-	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
-	//list accounts always returns the only account
-	accounts, err := c.service.nbCli.Accounts.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil
+	cr.Status.AtProvider = v1alpha1.NbSetupKeyObservation{
+		Id:                  setupkey.Id,
+		AllowExtraDnsLabels: setupkey.AllowExtraDnsLabels,
+		AutoGroups:          setupkey.AutoGroups,
+		Ephemeral:           setupkey.Ephemeral,
+		Expires:             setupkey.Expires.String(),
+		LastUsed:            setupkey.LastUsed.String(),
+		Name:                setupkey.Name,
+		Revoked:             setupkey.Revoked,
+		State:               setupkey.State,
+		Type:                setupkey.Type,
 	}
-	accountusers, err := c.service.nbCli.Users.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil
-	}
-	allgroups, err := c.service.nbCli.Groups.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil
-	}
-	account := accounts[0]
-	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
-		Settings: *ApitoNbAccountSettings(account.Settings),
-		UserList: *ApitoNbAccountUsers(accountusers, allgroups),
-	}
-	meta.SetExternalName(cr, account.Id)
+
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
-		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.Settings, *ApitoNbAccountSettings(account.Settings)),
+		ResourceExists:    true,
+		ResourceUpToDate:  isUpToDate(&cr.Spec.ForProvider, setupkey),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-// this method should never be called since we don't create the account, only update settings
-func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
-	if !ok {
-		return managed.ExternalCreation{}, errors.New(errNotNbAccount)
+func isUpToDate(nbSetupKeyParameters *v1alpha1.NbSetupKeyParameters, setupkey *api.SetupKey) bool {
+	if !reflect.DeepEqual(nbSetupKeyParameters.AutoGroups, setupkey.AutoGroups) {
+		return false
 	}
+	if !cmp.Equal(nbSetupKeyParameters.Revoked, setupkey.Revoked) {
+		return false
+	}
+	return true
+}
+
+func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
+	cr, ok := mg.(*v1alpha1.NbSetupKey)
+	if !ok {
+		return managed.ExternalCreation{}, errors.New(errNotNbSetupKey)
+	}
+
 	fmt.Printf("Creating: %+v", cr)
+	setupkey, err := c.service.nbCli.SetupKeys.Create(ctx, api.PostApiSetupKeysJSONRequestBody{
+		Name:                cr.Spec.ForProvider.Name,
+		AllowExtraDnsLabels: &cr.Spec.ForProvider.AllowExtraDnsLabels,
+		AutoGroups:          cr.Spec.ForProvider.AutoGroups,
+		Ephemeral:           &cr.Spec.ForProvider.Ephemeral,
+		ExpiresIn:           cr.Spec.ForProvider.ExpiresIn,
+		Type:                cr.Spec.ForProvider.Type,
+		UsageLimit:          cr.Spec.ForProvider.UsageLimit,
+	})
+
+	if err != nil {
+		fmt.Printf("err creating setupkey: %+v", err)
+		return managed.ExternalCreation{
+			// Optionally return any details that may be required to connect to the
+			// external resource. These will be stored as the connection secret.
+			ConnectionDetails: managed.ConnectionDetails{},
+		}, err
+	}
+	fmt.Printf("setupkey created: %+v", setupkey)
+	meta.SetExternalName(cr, setupkey.Id)
+
+	cd := managed.ConnectionDetails{xpv1.ResourceCredentialsSecretPasswordKey: []byte(setupkey.Key)}
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
-		ConnectionDetails: managed.ConnectionDetails{},
+		ConnectionDetails: cd,
 	}, nil
 }
 
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbSetupKey)
 	if !ok {
-		return managed.ExternalUpdate{}, errors.New(errNotNbAccount)
+		return managed.ExternalUpdate{}, errors.New(errNotNbSetupKey)
 	}
 
 	fmt.Printf("Updating: %+v", cr)
-	accountId := meta.GetExternalName(cr)
-	if accountId == "" {
-		return managed.ExternalUpdate{}, errors.New("can't find accountid")
+	setupKeyId := meta.GetExternalName(cr)
+	if setupKeyId == "" {
+		return managed.ExternalUpdate{}, errors.New("can't find setupKeyId")
 	}
-	accountsettings := NbToApiAccountSettings(cr.Status.AtProvider.Settings)
-	_, err := c.service.nbCli.Accounts.Update(ctx, accountId, api.AccountRequest{
-		Settings: *accountsettings,
+	_, err := c.service.nbCli.SetupKeys.Update(ctx, setupKeyId, api.PutApiSetupKeysKeyIdJSONRequestBody{
+		AutoGroups: cr.Spec.ForProvider.AutoGroups,
+		Revoked:    cr.Spec.ForProvider.Revoked,
 	})
 
 	if err != nil {
 		return managed.ExternalUpdate{}, err
 	}
-
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -251,73 +276,13 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
-// this method should never be called since we don't create/delete the account, only update settings
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr, ok := mg.(*v1alpha1.NbAccount)
+	cr, ok := mg.(*v1alpha1.NbSetupKey)
 	if !ok {
-		return errors.New(errNotNbAccount)
+		return errors.New(errNotNbSetupKey)
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
 
-	return nil
-}
-
-func ApitoNbAccountSettings(p api.AccountSettings) *v1alpha1.AccountSettings {
-	accountsettings := v1alpha1.AccountSettings{
-		Extra:                           (*v1alpha1.AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
-		PeerInactivityExpiration:        p.PeerInactivityExpiration,
-		PeerLoginExpiration:             p.PeerLoginExpiration,
-		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
-		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
-		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
-	}
-	return &accountsettings
-}
-
-func NbToApiAccountSettings(p v1alpha1.AccountSettings) *api.AccountSettings {
-	accountsettings := api.AccountSettings{
-		Extra:                           (*api.AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
-		PeerInactivityExpiration:        p.PeerInactivityExpiration,
-		PeerLoginExpiration:             p.PeerLoginExpiration,
-		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
-		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
-		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
-	}
-	return &accountsettings
-}
-
-func ApitoNbAccountUsers(accountusers []api.User, allgroups []api.Group) *[]v1alpha1.NbAccountUser {
-	nbaccountusers := make([]v1alpha1.NbAccountUser, len(accountusers))
-	for i, accountuser := range accountusers {
-		nbaccountusers[i] = v1alpha1.NbAccountUser{
-			UserEmail: accountuser.Email,
-			Groups:    *GetGroupIds(accountuser.AutoGroups, allgroups),
-			Role:      accountuser.Role,
-		}
-	}
-	return &nbaccountusers
-}
-
-func GetGroupIds(groupids []string, allgroups []api.Group) *[]string {
-	groupnames := make([]string, len(groupids))
-	for i, groupid := range groupids {
-		for _, group := range allgroups {
-			if group.Id == groupid {
-				groupnames[i] = group.Name
-				break
-			}
-		}
-	}
-	return &groupnames
+	return c.service.nbCli.SetupKeys.Delete(ctx, meta.GetExternalName(cr))
 }

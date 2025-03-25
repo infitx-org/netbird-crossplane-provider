@@ -1,0 +1,14 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbAccessToken
+metadata:
+  name: xplaneserviceuseraccesstokentest
+spec:
+  providerConfigRef:
+    name: example
+  forProvider:
+    expires_in: 1
+    name: test-token
+    user_name: testserviceuser
+  writeConnectionSecretToRef:
+    name: accesstokensecret
+    namespace: crossplane-system

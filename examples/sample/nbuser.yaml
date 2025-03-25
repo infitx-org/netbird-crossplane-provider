@@ -11,4 +11,18 @@ spec:
   providerConfigRef:
     name: example
   forProvider:
-    email: sijo.george@infitx.com
+    email: david@infitx.com
+    is_service_user: false
+---
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbUser
+metadata:
+  name: xplaneserviceusertest
+spec:
+  providerConfigRef:
+    name: example
+  forProvider:
+    name: testserviceuser
+    is_service_user: true
+    role: admin
+    auto_groups: []

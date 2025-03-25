@@ -21,10 +21,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/crossplane/provider-netbird/internal/controller/config"
+	"github.com/crossplane/provider-netbird/internal/controller/nbaccesstoken"
 	"github.com/crossplane/provider-netbird/internal/controller/nbaccount"
 	"github.com/crossplane/provider-netbird/internal/controller/nbdnssetting"
 	"github.com/crossplane/provider-netbird/internal/controller/nbgroup"
 	"github.com/crossplane/provider-netbird/internal/controller/nbnameserver"
+	"github.com/crossplane/provider-netbird/internal/controller/nbsetupkey"
 	"github.com/crossplane/provider-netbird/internal/controller/nbuser"
 )
 
@@ -38,6 +40,8 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		nbdnssetting.Setup,
 		nbnameserver.Setup,
 		nbuser.Setup,
+		nbsetupkey.Setup,
+		nbaccesstoken.Setup,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err
