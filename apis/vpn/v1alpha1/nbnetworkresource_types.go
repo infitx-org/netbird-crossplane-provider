@@ -44,6 +44,8 @@ type NbNetworkResourceParameters struct {
 
 	// Type Network resource type based of the address
 	Type string `json:"type"`
+
+	NetworkName string `json:"network_name"`
 }
 type GroupMinimum struct {
 	// Id Group ID

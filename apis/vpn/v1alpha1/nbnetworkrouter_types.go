@@ -40,7 +40,8 @@ type NbNetworkRouterParameters struct {
 	Peer *string `json:"peer,omitempty"`
 
 	// PeerGroups Peers Group Identifier associated with route. This property can not be set together with `peer`
-	PeerGroups *[]string `json:"peer_groups,omitempty"`
+	PeerGroups  *[]string `json:"peer_groups,omitempty"`
+	NetworkName string    `json:"network_name"`
 }
 
 // NbNetworkRouterObservation are the observable fields of a NbNetworkRouter.

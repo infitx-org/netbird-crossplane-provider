@@ -197,6 +197,17 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			ResourceExists: false,
 		}, nil
 	}
+	lastused := accesstoken.LastUsed.Local().String()
+	cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{
+		Id:             accesstoken.Id,
+		CreatedAt:      accesstoken.CreatedBy,
+		ExpirationDate: accesstoken.ExpirationDate.Local().String(),
+		CreatedBy:      accesstoken.CreatedBy,
+		LastUsed:       &lastused,
+		Name:           accesstoken.Name,
+	}
+
+	cr.Status.SetConditions(xpv1.Available())
 	return managed.ExternalObservation{
 		ResourceExists:    true,
 		ResourceUpToDate:  true, //isUpToDate(&cr.Spec.ForProvider, accesstoken),

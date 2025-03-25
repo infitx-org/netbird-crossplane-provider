@@ -85,6 +85,8 @@ spec:
                     description: Metric Route metric number. Lowest number has higher
                       priority
                     type: integer
+                  network_name:
+                    type: string
                   peer:
                     description: Peer Peer Identifier associated with route. This
                       property can not be set together with `peer_groups`
@@ -99,6 +101,7 @@ spec:
                 - enabled
                 - masquerade
                 - metric
+                - network_name
                 type: object
               managementPolicies:
                 default:
