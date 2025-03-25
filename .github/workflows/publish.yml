@@ -14,7 +14,7 @@ env:
   GO_VERSION: '1.23'
   DOCKER_BUILDX_VERSION: 'v0.20.1'
   GITHUB_REPOSITORY: 'provider-netbird'
-  CLEANUP_DISK: "false"
+  CLEANUP_DISK: "true"
 
   # Registry/Org names
   CROSSPLANE_REGORG: 'ghcr.io/infitx-org' # xpkg.crossplane.io/infitx-org
