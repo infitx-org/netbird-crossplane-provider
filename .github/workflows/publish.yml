@@ -12,17 +12,15 @@ on:
 env:
   # Common versions
   DOCKER_BUILDX_VERSION: 'v0.20.1'
-  UP_VERSION: 'v0.37.1'
   GITHUB_REPOSITORY: 'provider-netbird'
   CLEANUP_DISK: "false"
-  RUNS_ON: ubuntu-latest
 
   # Registry/Org names
   CROSSPLANE_REGORG: 'ghcr.io/infitx-org' # xpkg.crossplane.io/infitx-org
 
 jobs:
   publish-artifacts:
-    runs-on: ${{ env.RUNS_ON }}
+    runs-on: ubuntu-latest
     steps:
       - name: Cleanup Disk
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
