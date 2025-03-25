@@ -1,0 +1,103 @@
+name: Publish Provider
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+      - fix/github-actions
+  pull_request: {}
+  workflow_dispatch: {}
+
+env:
+  # Common versions
+  DOCKER_BUILDX_VERSION: 'v0.20.1'
+  UP_VERSION: 'v0.37.1'
+  GITHUB_REPOSITORY: 'provider-netbird'
+  CLEANUP_DISK: "false"
+  RUNS_ON: ubuntu-latest
+
+  # Registry/Org names
+  CROSSPLANE_REGORG: 'ghcr.io/infitx-org' # xpkg.crossplane.io/infitx-org
+
+jobs:
+  publish-artifacts:
+    runs-on: ${{ env.RUNS_ON }}
+    steps:
+      - name: Cleanup Disk
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        if: ${{ env.CLEANUP_DISK }} == "true"
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          tool-cache: true
+          large-packages: false
+          swap-storage: false
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@2b82ce82d56a2a04d2637cd93a637ae1b359c0a7 # v2
+        with:
+          platforms: all
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@885d1462b80bc1c1c7f0b00334ad271f09369c55 # v2
+        with:
+          version: ${{ env.DOCKER_BUILDX_VERSION }}
+          install: true
+
+      - name: Login to GHCR using PAT
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4
+        with:
+          submodules: true
+
+      - name: Fetch History
+        run: git fetch --prune --unshallow
+
+      - name: Setup Go
+        uses: actions/setup-go@6edd4406fa81c3da01a34fa6f6343087c207a568 # v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Find the Go Build Cache
+        id: go_cache
+        run: |
+          echo "cache=$(make go.cachedir)" >> $GITHUB_OUTPUT && \
+          echo "mod_cache=$(make go.mod.cachedir)" >> $GITHUB_OUTPUT
+
+      - name: Cache the Go Build Cache
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4
+        with:
+          path: ${{ steps.go_cache.outputs.cache }}
+          key: ${{ runner.os }}-build-publish-artifacts-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-build-publish-artifacts-
+
+      - name: Cache Go Dependencies
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4
+        with:
+          path: ${{ steps.go_cache.outputs.mod_cache }}
+          key: ${{ runner.os }}-pkg-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-pkg-
+
+      - name: Vendor Dependencies
+        run: make vendor vendor.check
+
+      - name: Build Artifacts
+        id: build_artifacts
+        run: |
+          make -j XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" build.all
+        env:
+          # We're using docker buildx, which doesn't actually load the images it
+          # builds by default. Specifying --load does so.
+          BUILD_ARGS: "--load"
+
+      - name: Publish Artifacts
+        run: |
+          make -j XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" publish
