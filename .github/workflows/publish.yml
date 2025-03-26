@@ -36,6 +36,13 @@ jobs:
         with:
           submodules: true
 
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.CROSSPLANE_REGORG }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Fetch History
         run: git fetch --prune --unshallow
 
