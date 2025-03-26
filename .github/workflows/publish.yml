@@ -2,8 +2,8 @@ name: Publish Provider
 
 on:
   push:
-    branches:
-      - '**' # TOOD: To be change to run just on tags
+    tags:
+      - '**'
   pull_request: {}
   workflow_dispatch: {}
 
@@ -78,7 +78,7 @@ jobs:
           # We're using docker buildx, which doesn't actually load the images it
           # builds by default. Specifying --load does so.
           BUILD_ARGS: "--load"
-# make publish XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" BRANCH_NAME=${GITHUB_REF##*/}
+
       - name: Publish Provider
         run: |
-          make publish XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" BRANCH_NAME=main
+          make publish XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" BRANCH_NAME=${GITHUB_REF##*/}
