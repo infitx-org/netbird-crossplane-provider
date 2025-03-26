@@ -91,12 +91,10 @@ spec:
                     description: Peer Peer Identifier associated with route. This
                       property can not be set together with `peer_groups`
                     type: string
-                  peer_groups:
+                  peer_group_name:
                     description: PeerGroups Peers Group Identifier associated with
                       route. This property can not be set together with `peer`
-                    items:
-                      type: string
-                    type: array
+                    type: string
                 required:
                 - enabled
                 - masquerade
@@ -296,12 +294,10 @@ spec:
                     description: Peer Peer Identifier associated with route. This
                       property can not be set together with `peer_groups`
                     type: string
-                  peer_groups:
+                  peer_group:
                     description: PeerGroups Peers Group Identifier associated with
                       route. This property can not be set together with `peer`
-                    items:
-                      type: string
-                    type: array
+                    type: string
                 required:
                 - enabled
                 - id

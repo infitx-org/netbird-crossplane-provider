@@ -108,10 +108,7 @@ spec:
                             to the group
                           type: integer
                       required:
-                      - id
                       - name
-                      - peers_count
-                      - resources_count
                       type: object
                     type: array
                   name:
@@ -119,16 +116,12 @@ spec:
                     type: string
                   network_name:
                     type: string
-                  type:
-                    description: Type Network resource type based of the address
-                    type: string
                 required:
                 - address
                 - enabled
                 - groups
                 - name
                 - network_name
-                - type
                 type: object
               managementPolicies:
                 default:
@@ -339,10 +332,7 @@ spec:
                             to the group
                           type: integer
                       required:
-                      - id
                       - name
-                      - peers_count
-                      - resources_count
                       type: object
                     type: array
                   id:

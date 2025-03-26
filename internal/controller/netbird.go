@@ -26,6 +26,9 @@ import (
 	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbdnssetting"
 	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbgroup"
 	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnameserver"
+  "github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnetwork"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnetworkresource"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnetworkrouter"
 	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbsetupkey"
 	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbuser"
 )
@@ -42,6 +45,9 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		nbuser.Setup,
 		nbsetupkey.Setup,
 		nbaccesstoken.Setup,
+		nbnetwork.Setup,
+		nbnetworkresource.Setup,
+		nbnetworkrouter.Setup,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err

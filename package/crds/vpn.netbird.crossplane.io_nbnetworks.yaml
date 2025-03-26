@@ -286,10 +286,6 @@ spec:
                 required:
                 - id
                 - name
-                - policies
-                - resources
-                - routers
-                - routing_peers_count
                 type: object
               conditions:
                 description: Conditions of the resource.

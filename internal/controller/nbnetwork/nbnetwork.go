@@ -29,6 +29,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/google/go-cmp/cmp"
 	apisv1alpha1 "github.com/crossplane/netbird-crossplane-provider/apis/v1alpha1"
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
@@ -167,6 +168,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbNetwork)
 	}
+	fmt.Printf("observing network: %+v", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
@@ -181,11 +183,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	cr.Status.AtProvider = v1alpha1.NbNetworkObservation{
 		Id:                network.Id,
-		Resources:         network.Resources,
+		Resources:         &network.Resources,
 		Description:       network.Description,
 		Name:              network.Name,
-		Policies:          network.Policies,
-		Routers:           network.Routers,
+		Policies:          &network.Policies,
+		Routers:           &network.Routers,
 		RoutingPeersCount: network.RoutingPeersCount,
 	}
 
@@ -193,8 +195,18 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: (network.Description == &cr.Spec.ForProvider.Description) && (&network.Name == &cr.Spec.ForProvider.Name),
+		ResourceUpToDate: isnetworkuptodate(network, cr.Spec.ForProvider),
 	}, nil
+}
+
+func isnetworkuptodate(network *nbapi.Network, nbNetworkParameters v1alpha1.NbNetworkParameters) bool {
+	if !cmp.Equal(*network.Description, nbNetworkParameters.Description) {
+		return false
+	}
+	if !cmp.Equal(network.Name, nbNetworkParameters.Name) {
+		return false
+	}
+	return true
 }
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
@@ -202,6 +214,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbNetwork)
 	}
+	fmt.Printf("creating network: %+v", cr)
 	network, err := c.service.nbCli.Networks.Create(ctx, nbapi.NetworkRequest{
 		Name:        cr.Spec.ForProvider.Name,
 		Description: &cr.Spec.ForProvider.Description,

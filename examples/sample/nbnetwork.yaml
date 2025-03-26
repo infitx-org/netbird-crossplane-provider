@@ -1,0 +1,10 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbNetwork
+metadata:
+  name: xplanenetworktest
+spec:
+  forProvider:
+    name: xplanenetworktest
+    description: "network test from crossplane"
+  providerConfigRef:
+    name: example
