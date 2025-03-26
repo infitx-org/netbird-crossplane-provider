@@ -13,14 +13,14 @@ env:
   # Common versions
   GO_VERSION: '1.23'
   DOCKER_BUILDX_VERSION: 'v0.20.1'
-  GITHUB_REPOSITORY: 'provider-netbird'
+  GITHUB_REPOSITORY: 'netbird-crossplane-provider'
   CLEANUP_DISK: "true"
 
   # Registry/Org names
   CROSSPLANE_REGORG: 'ghcr.io/infitx-org' # xpkg.crossplane.io/infitx-org
 
 jobs:
-  publish-artifacts:
+  publish-provider:
     runs-on: ubuntu-latest
     steps:
       - name: Cleanup Disk
@@ -73,8 +73,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ${{ env.cachedir }}
-          key: ${{ runner.os }}-build-publish-artifacts-${{ hashFiles('**/go.sum') }}
-          restore-keys: ${{ runner.os }}-build-publish-artifacts-
+          key: ${{ runner.os }}-build-publish-provider-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-build-publish-provider-
 
       - name: Cache Go Dependencies
         uses: actions/cache@v3
@@ -86,8 +86,8 @@ jobs:
       - name: Download Go Modules
         run: make modules.download modules.check
 
-      - name: Build Artifacts
-        id: build_artifacts
+      - name: Build Provider
+        id: build_provider
         run: |
           make -j XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" build.all
         env:
@@ -95,6 +95,6 @@ jobs:
           # builds by default. Specifying --load does so.
           BUILD_ARGS: "--load"
 
-      - name: Publish Artifacts
+      - name: Publish Provider
         run: |
           make -j XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" publish
