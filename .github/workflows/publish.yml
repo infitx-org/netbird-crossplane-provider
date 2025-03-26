@@ -52,8 +52,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ${{ env.cachedir }}
-          key: ${{ runner.os }}-build-publish-artifacts-${{ hashFiles('**/go.sum') }}
-          restore-keys: ${{ runner.os }}-build-publish-artifacts-
+          key: ${{ runner.os }}-build-publish-provider-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-build-publish-provider-
 
       - name: Cache Go Dependencies
         uses: actions/cache@v3
@@ -64,6 +64,13 @@ jobs:
 
       - name: Download Go Modules
         run: make modules.download modules.check
+
+      - name: Build Provider
+        run: make -j2 build.all
+        env:
+          # We're using docker buildx, which doesn't actually load the images it
+          # builds by default. Specifying --load does so.
+          BUILD_ARGS: "--load"
 
       - name: Publish Provider
         run: |
