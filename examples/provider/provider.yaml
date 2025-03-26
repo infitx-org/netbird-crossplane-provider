@@ -1,0 +1,6 @@
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: netbird-crossplane-provider
+spec:
+  package: ghcr.io/infitx-org/netbird-crossplane-provider:v0.0.4
