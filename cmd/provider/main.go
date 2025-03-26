@@ -37,10 +37,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	"github.com/crossplane/provider-netbird/apis"
-	"github.com/crossplane/provider-netbird/apis/v1alpha1"
-	netbird "github.com/crossplane/provider-netbird/internal/controller"
-	"github.com/crossplane/provider-netbird/internal/features"
+	"github.com/infitx-org/netbird-crossplane-provider/apis"
+	"github.com/infitx-org/netbird-crossplane-provider/apis/v1alpha1"
+	netbird "github.com/infitx-org/netbird-crossplane-provider/internal/controller"
+	"github.com/infitx-org/netbird-crossplane-provider/internal/features"
 )
 
 func main() {

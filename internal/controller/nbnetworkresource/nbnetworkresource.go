@@ -32,16 +32,16 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	"github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
-	apisv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
-	"github.com/crossplane/provider-netbird/internal/features"
+	apisv1alpha1 "github.com/infitx-org/netbird-crossplane-provider/apis/v1alpha1"
+	"github.com/infitx-org/netbird-crossplane-provider/apis/vpn/v1alpha1"
+	"github.com/infitx-org/netbird-crossplane-provider/internal/features"
 )
 
 const (
-	errNotNbNetworkResource    = "managed resource is not a NbNetworkResource custom resource"
-	errTrackPCUsage = "cannot track ProviderConfig usage"
-	errGetPC        = "cannot get ProviderConfig"
-	errGetCreds     = "cannot get credentials"
+	errNotNbNetworkResource = "managed resource is not a NbNetworkResource custom resource"
+	errTrackPCUsage         = "cannot track ProviderConfig usage"
+	errGetPC                = "cannot get ProviderConfig"
+	errGetCreds             = "cannot get credentials"
 
 	errNewClient = "cannot create new Service"
 )

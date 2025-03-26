@@ -20,8 +20,8 @@ package apis
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
-	netbirdv1alpha1 "github.com/crossplane/provider-netbird/apis/v1alpha1"
-	nbgroupv1alpha1 "github.com/crossplane/provider-netbird/apis/vpn/v1alpha1"
+	netbirdv1alpha1 "github.com/infitx-org/netbird-crossplane-provider/apis/v1alpha1"
+	nbgroupv1alpha1 "github.com/infitx-org/netbird-crossplane-provider/apis/vpn/v1alpha1"
 )
 
 func init() {

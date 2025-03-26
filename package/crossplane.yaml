@@ -4,7 +4,7 @@ metadata:
   name: provider-netbird
   annotations:
     meta.crossplane.io/maintainer: Crossplane Maintainers <info@crossplane.io>
-    meta.crossplane.io/source: github.com/crossplane/provider-netbird
+    meta.crossplane.io/source: github.com/infitx-org/netbird-crossplane-provider
     meta.crossplane.io/license: Apache-2.0
     meta.crossplane.io/description: |
       A netbird that can be used to create Crossplane providers.
