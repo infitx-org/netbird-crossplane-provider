@@ -37,10 +37,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
-	"github.com/crossplane/provider-netbird/apis"
-	"github.com/crossplane/provider-netbird/apis/v1alpha1"
-	netbird "github.com/crossplane/provider-netbird/internal/controller"
-	"github.com/crossplane/provider-netbird/internal/features"
+	"github.com/crossplane/netbird-crossplane-provider/apis"
+	"github.com/crossplane/netbird-crossplane-provider/apis/v1alpha1"
+	netbird "github.com/crossplane/netbird-crossplane-provider/internal/controller"
+	"github.com/crossplane/netbird-crossplane-provider/internal/features"
 )
 
 func main() {
@@ -60,7 +60,7 @@ func main() {
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	zl := zap.New(zap.UseDevMode(*debug))
-	log := logging.NewLogrLogger(zl.WithName("provider-netbird"))
+	log := logging.NewLogrLogger(zl.WithName("netbird-crossplane-provider"))
 	if *debug {
 		// The controller-runtime runs with a no-op logger by default. It is
 		// *very* verbose even at info level, so we only provide it a real
@@ -86,7 +86,7 @@ func main() {
 		// server. Switching to Leases only and longer leases appears to
 		// alleviate this.
 		LeaderElection:             *leaderElection,
-		LeaderElectionID:           "crossplane-leader-election-provider-netbird",
+		LeaderElectionID:           "crossplane-leader-election-netbird-crossplane-provider",
 		LeaderElectionResourceLock: resourcelock.LeasesResourceLock,
 		LeaseDuration:              func() *time.Duration { d := 60 * time.Second; return &d }(),
 		RenewDeadline:              func() *time.Duration { d := 50 * time.Second; return &d }(),

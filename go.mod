@@ -1,4 +1,4 @@
-module github.com/crossplane/provider-netbird
+module github.com/crossplane/netbird-crossplane-provider
 
 go 1.23.0
 
