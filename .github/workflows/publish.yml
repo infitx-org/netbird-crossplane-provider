@@ -17,7 +17,7 @@ env:
   CLEANUP_DISK: "true"
 
   # Registry/Org names
-  CROSSPLANE_REGORG: 'ghcr.io/infitx-org' # xpkg.crossplane.io/infitx-org
+  CROSSPLANE_REGORG: 'ghcr.io/infitx-org/netbird-crossplane-provider' # xpkg.crossplane.io/infitx-org
 
 jobs:
   publish-provider:
