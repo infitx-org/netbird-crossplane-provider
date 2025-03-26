@@ -1,0 +1,16 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbNetworkResource
+metadata:
+  name: xplaneresourcetest
+spec:
+  forProvider:
+    description: "test network resource"
+    enabled: true
+    name: testnetworkresource
+    groups:
+      - name: "xplanegrouptest"
+    address: "10.10.10.0/24"
+    network_name: xplanenetworktest
+
+  providerConfigRef:
+    name: example

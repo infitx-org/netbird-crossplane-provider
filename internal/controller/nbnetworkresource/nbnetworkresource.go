@@ -188,7 +188,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if err != nil {
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, err
+		}, nil
 	}
 	cr.Status.AtProvider = v1alpha1.NbNetworkResourceObservation{
 		Id:          networkresource.Id,
@@ -212,8 +212,8 @@ func convertGroups(groupMinimums []nbapi.GroupMinimum) []v1alpha1.GroupMinimum {
 	groups := make([]v1alpha1.GroupMinimum, len(groupMinimums))
 	for i, g := range groupMinimums {
 		groups[i] = v1alpha1.GroupMinimum{
-			Id:             g.Id,
-			Issued:         string(*g.Issued),
+			Id: &g.Id,
+			//Issued:         &g.Issued,
 			Name:           g.Name,
 			PeersCount:     g.PeersCount,
 			ResourcesCount: g.ResourcesCount,
@@ -237,11 +237,24 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 			apinetwork = &network
 		}
 	}
+	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
+	groupids := make([]string, len(cr.Spec.ForProvider.Groups))
+	for j, provgroup := range cr.Spec.ForProvider.Groups {
+		for _, apigroup := range groups {
+			if apigroup.Name == provgroup.Name {
+				groupids[j] = apigroup.Id
+				break
+			}
+		}
+	}
 	networkresource, err := c.service.nbCli.Networks.Resources(apinetwork.Id).Create(ctx, nbapi.NetworkResourceRequest{
 		Enabled:     cr.Spec.ForProvider.Enabled,
 		Address:     cr.Spec.ForProvider.Address,
 		Description: cr.Spec.ForProvider.Description,
-		Groups:      convertGMToStringArray(cr.Spec.ForProvider.Groups),
+		Groups:      groupids,
 		Name:        cr.Spec.ForProvider.Name,
 	})
 
@@ -254,13 +267,13 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	return managed.ExternalCreation{}, nil
 }
 
-func convertGMToStringArray(groupMinimum []v1alpha1.GroupMinimum) []string {
-	groups := make([]string, len(groupMinimum))
-	for i, g := range groupMinimum {
-		groups[i] = g.Id
-	}
-	return groups
-}
+// func convertGMToStringArray(groupids []string) []string {
+// 	groups := make([]string, len(groupMinimum))
+// 	for i, g := range groupMinimum {
+// 		groups[i] = g.Id
+// 	}
+// 	return groups
+// }
 
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
 	cr, ok := mg.(*v1alpha1.NbNetworkResource)

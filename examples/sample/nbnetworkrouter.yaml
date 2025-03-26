@@ -1,0 +1,13 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbNetworkRouter
+metadata:
+  name: xplaneroutertest
+spec:
+  forProvider:
+    enabled: true
+    masquerade: true
+    metric: 9999
+    peer_group_name: xplanepeergrouptest
+    network_name: xplanenetworktest
+  providerConfigRef:
+    name: example

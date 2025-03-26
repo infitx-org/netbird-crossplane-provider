@@ -42,16 +42,16 @@ type NbNetworkObservation struct {
 	Name string `json:"name"`
 
 	// Policies List of policy IDs associated with the network
-	Policies []string `json:"policies"`
+	Policies *[]string `json:"policies,omitempty"`
 
 	// Resources List of network resource IDs associated with the network
-	Resources []string `json:"resources"`
+	Resources *[]string `json:"resources,omitempty"`
 
 	// Routers List of router IDs associated with the network
-	Routers []string `json:"routers"`
+	Routers *[]string `json:"routers,omitempty"`
 
 	// RoutingPeersCount Count of routing peers associated with the network
-	RoutingPeersCount int `json:"routing_peers_count"`
+	RoutingPeersCount int `json:"routing_peers_count,omitempty"`
 }
 
 // A NbNetworkSpec defines the desired state of a NbNetwork.

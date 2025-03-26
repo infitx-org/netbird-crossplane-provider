@@ -42,26 +42,23 @@ type NbNetworkResourceParameters struct {
 	// Name Network resource name
 	Name string `json:"name"`
 
-	// Type Network resource type based of the address
-	Type string `json:"type"`
-
 	NetworkName string `json:"network_name"`
 }
 type GroupMinimum struct {
 	// Id Group ID
-	Id string `json:"id"`
+	Id *string `json:"id,omitempty"`
 
 	// Issued How the group was issued (api, integration, jwt)
-	Issued string `json:"issued,omitempty"`
+	Issued *string `json:"issued,omitempty"`
 
 	// Name Group Name identifier
 	Name string `json:"name"`
 
 	// PeersCount Count of peers associated to the group
-	PeersCount int `json:"peers_count"`
+	PeersCount int `json:"peers_count,omitempty"`
 
 	// ResourcesCount Count of resources associated to the group
-	ResourcesCount int `json:"resources_count"`
+	ResourcesCount int `json:"resources_count,omitempty"`
 }
 
 // NbNetworkResourceObservation are the observable fields of a NbNetworkResource.

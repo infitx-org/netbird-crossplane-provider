@@ -187,17 +187,27 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if err != nil {
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, err
+		}, nil
 	}
-	cr.Status.AtProvider = v1alpha1.NbNetworkRouterObservation{
-		Id:         networkrouter.Id,
-		Enabled:    networkrouter.Enabled,
-		Masquerade: networkrouter.Masquerade,
-		Metric:     networkrouter.Metric,
-		PeerGroups: networkrouter.PeerGroups,
-		Peer:       networkrouter.Peer,
+	if networkrouter.PeerGroups != nil && len(*networkrouter.PeerGroups) >= 1 {
+		cr.Status.AtProvider = v1alpha1.NbNetworkRouterObservation{
+			Id:         networkrouter.Id,
+			Enabled:    networkrouter.Enabled,
+			Masquerade: networkrouter.Masquerade,
+			Metric:     networkrouter.Metric,
+			PeerGroup:  &(*networkrouter.PeerGroups)[0],
+			Peer:       nil,
+		}
+	} else {
+		cr.Status.AtProvider = v1alpha1.NbNetworkRouterObservation{
+			Id:         networkrouter.Id,
+			Enabled:    networkrouter.Enabled,
+			Masquerade: networkrouter.Masquerade,
+			Metric:     networkrouter.Metric,
+			PeerGroup:  nil,
+			Peer:       networkrouter.Peer,
+		}
 	}
-
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
@@ -221,19 +231,32 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 			apinetwork = &network
 		}
 	}
+	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
+	groupids := make([]string, 1)
+
+	for _, apigroup := range groups {
+		if apigroup.Name == cr.Spec.ForProvider.PeerGroupName {
+			groupids[0] = apigroup.Id
+			break
+		}
+	}
+
 	networkrouter, err := c.service.nbCli.Networks.Routers(apinetwork.Id).Create(ctx, nbapi.NetworkRouterRequest{
 		Enabled:    cr.Spec.ForProvider.Enabled,
 		Masquerade: cr.Spec.ForProvider.Masquerade,
 		Metric:     cr.Spec.ForProvider.Metric,
 		Peer:       cr.Spec.ForProvider.Peer,
-		PeerGroups: cr.Spec.ForProvider.PeerGroups,
+		PeerGroups: &groupids,
 	})
 
 	if err != nil {
 		fmt.Printf("err creating networkrouter: %+v", err)
 		return managed.ExternalCreation{}, err
 	}
-	fmt.Printf("network created: %+v", networkrouter)
+	fmt.Printf("networkrouter created: %+v", networkrouter)
 	meta.SetExternalName(cr, networkrouter.Id)
 	return managed.ExternalCreation{}, nil
 }
