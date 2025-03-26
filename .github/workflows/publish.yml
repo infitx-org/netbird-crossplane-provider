@@ -86,9 +86,6 @@ jobs:
       - name: Download Go Modules
         run: make modules.download modules.check
 
-      - name: Vendor Dependencies
-        run: make vendor vendor.check
-
       - name: Build Artifacts
         id: build_artifacts
         run: |
