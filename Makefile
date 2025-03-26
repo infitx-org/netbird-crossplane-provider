@@ -1,7 +1,7 @@
 # ====================================================================================
 # Setup Project
-PROJECT_NAME := provider-netbird
-PROJECT_REPO := github.com/crossplane/$(PROJECT_NAME)
+PROJECT_NAME := netbird-crossplane-provider
+PROJECT_REPO := github.com/infitx-org/$(PROJECT_NAME)
 
 PLATFORMS ?= linux_amd64 linux_arm64
 -include build/makelib/common.mk
@@ -30,22 +30,22 @@ GO111MODULE = on
 # ====================================================================================
 # Setup Images
 
-IMAGES = provider-netbird
+IMAGES = netbird-crossplane-provider
 -include build/makelib/imagelight.mk
 
 # ====================================================================================
 # Setup XPKG
 
-XPKG_REG_ORGS ?= xpkg.upbound.io/crossplane
+XPKG_REG_ORGS ?= xpkg.upbound.io/infitx-org
 # NOTE(hasheddan): skip promoting on xpkg.upbound.io as channel tags are
 # inferred.
-XPKG_REG_ORGS_NO_PROMOTE ?= xpkg.upbound.io/crossplane
-XPKGS = provider-netbird
+XPKG_REG_ORGS_NO_PROMOTE ?= xpkg.upbound.io/infitx-org
+XPKGS = netbird-crossplane-provider
 -include build/makelib/xpkg.mk
 
 # NOTE(hasheddan): we force image building to happen prior to xpkg build so that
 # we ensure image is present in daemon.
-xpkg.build.provider-netbird: do.build.images
+xpkg.build.netbird-crossplane-provider: do.build.images
 
 fallthrough: submodules
 	@echo Initial setup complete. Running make again . . .
