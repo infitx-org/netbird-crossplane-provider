@@ -20,17 +20,17 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/crossplane/provider-netbird/internal/controller/config"
-	"github.com/crossplane/provider-netbird/internal/controller/nbaccesstoken"
-	"github.com/crossplane/provider-netbird/internal/controller/nbaccount"
-	"github.com/crossplane/provider-netbird/internal/controller/nbdnssetting"
-	"github.com/crossplane/provider-netbird/internal/controller/nbgroup"
-	"github.com/crossplane/provider-netbird/internal/controller/nbnameserver"
-	"github.com/crossplane/provider-netbird/internal/controller/nbnetwork"
-	"github.com/crossplane/provider-netbird/internal/controller/nbnetworkresource"
-	"github.com/crossplane/provider-netbird/internal/controller/nbnetworkrouter"
-	"github.com/crossplane/provider-netbird/internal/controller/nbsetupkey"
-	"github.com/crossplane/provider-netbird/internal/controller/nbuser"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/config"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbaccesstoken"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbaccount"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbdnssetting"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbgroup"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnameserver"
+  "github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnetwork"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnetworkresource"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbnetworkrouter"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbsetupkey"
+	"github.com/crossplane/netbird-crossplane-provider/internal/controller/nbuser"
 )
 
 // Setup creates all Netbird controllers with the supplied logger and adds them to
