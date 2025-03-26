@@ -18,7 +18,7 @@ env:
 
   # Registry/Org names
   # CROSSPLANE_REGORG: 'ghcr.io/infitx-org/netbird-crossplane-provider' # xpkg.crossplane.io/infitx-org
-  CROSSPLANE_REGORG: 'xpkg.upbound.io/infitx-org'
+  CROSSPLANE_REGORG: 'ghcr.io/infitx-org'
 jobs:
   publish-provider:
     runs-on: ubuntu-latest
