@@ -81,7 +81,7 @@ jobs:
       - name: Publish Provider
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
-            make publish XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}"
+            make publish XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" BRANCH_NAME=main
           else
             make publishBRANCH_NAME=${GITHUB_REF##*/} XPKG_REG_ORGS="${{ env.CROSSPLANE_REGORG }}" XPKG_REG_ORGS_NO_PROMOTE="${{ env.CROSSPLANE_REGORG }}" BRANCH_NAME=${GITHUB_REF##*/}
           fi
