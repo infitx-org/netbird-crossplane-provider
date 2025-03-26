@@ -1,6 +1,6 @@
-# provider-netbird
+# netbird-crossplane-provider
 
-`provider-netbird` is a minimal [Crossplane](https://crossplane.io/) Provider
+`netbird-crossplane-provider` is a minimal [Crossplane](https://crossplane.io/) Provider
 that is meant to be used as a netbird for implementing new Providers. It comes
 with the following features that are meant to be refactored:
 
