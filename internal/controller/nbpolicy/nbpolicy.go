@@ -190,7 +190,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		Description:         policy.Description,
 		Name:                policy.Name,
 		Rules:               ApiToNBRules(policy.Rules),
-		SourcePostureChecks: policy.SourcePostureChecks,
+		SourcePostureChecks: &policy.SourcePostureChecks,
 	}
 
 	cr.Status.SetConditions(xpv1.Available())
@@ -208,12 +208,16 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Creating: %+v", cr)
+	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
 	policy, err := c.service.nbCli.Policies.Create(ctx, nbapi.PostApiPoliciesJSONRequestBody{
 		Name:                cr.Spec.ForProvider.Name,
 		Description:         cr.Spec.ForProvider.Description,
 		Enabled:             cr.Spec.ForProvider.Enabled,
-		SourcePostureChecks: &cr.Spec.ForProvider.SourcePostureChecks,
-		Rules:               NbToApiRules(cr.Spec.ForProvider.Rules),
+		SourcePostureChecks: cr.Spec.ForProvider.SourcePostureChecks,
+		Rules:               NbToApiRules(cr.Spec.ForProvider.Rules, groups),
 	})
 	if err != nil {
 		fmt.Printf("err creating policy: %+v", err)
@@ -255,21 +259,21 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return c.service.nbCli.Policies.Delete(ctx, policyid)
 }
 
-func NbToApiRules(policyRule []v1alpha1.PolicyRule) []nbapi.PolicyRuleUpdate {
+func NbToApiRules(policyRule []v1alpha1.PolicyRule, groups []nbapi.Group) []nbapi.PolicyRuleUpdate {
 	rules := make([]nbapi.PolicyRuleUpdate, len(policyRule))
 	for i, prule := range policyRule {
 		rules[i] = nbapi.PolicyRuleUpdate{
 			Action:        nbapi.PolicyRuleUpdateAction(prule.Action),
 			Bidirectional: prule.Bidirectional,
 			Description:   prule.Description,
-			Destinations:  NbToApiGroupMinimums(prule.Destinations),
+			Destinations:  NbToApiGroupMinimums(prule.Destinations, groups),
 			Enabled:       prule.Enabled,
 			Id:            prule.Id,
 			Name:          prule.Name,
 			PortRanges:    NbToApiPortRanges(prule.PortRanges),
 			Ports:         prule.Ports,
 			Protocol:      nbapi.PolicyRuleUpdateProtocol(prule.Protocol),
-			Sources:       NbToApiGroupMinimums(prule.Sources),
+			Sources:       NbToApiGroupMinimums(prule.Sources, groups),
 		}
 	}
 	return rules
@@ -286,10 +290,15 @@ func NbToApiPortRanges(rulePortRange *[]v1alpha1.RulePortRange) *[]nbapi.RulePor
 	return &rportrange
 }
 
-func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum) *[]string {
+func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi.Group) *[]string {
 	ids := make([]string, len(*groupMinimums))
 	for i, gmin := range *groupMinimums {
-		ids[i] = *gmin.Id
+		for _, group := range groups {
+			if group.Name == gmin.Name {
+				ids[i] = *gmin.Id
+				break
+			}
+		}
 	}
 	return &ids
 }

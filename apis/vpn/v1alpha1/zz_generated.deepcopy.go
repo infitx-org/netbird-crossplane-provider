@@ -1359,8 +1359,12 @@ func (in *NbPolicyObservation) DeepCopyInto(out *NbPolicyObservation) {
 	}
 	if in.SourcePostureChecks != nil {
 		in, out := &in.SourcePostureChecks, &out.SourcePostureChecks
-		*out = make([]string, len(*in))
-		copy(*out, *in)
+		*out = new([]string)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]string, len(*in))
+			copy(*out, *in)
+		}
 	}
 }
 
@@ -1391,8 +1395,12 @@ func (in *NbPolicyParameters) DeepCopyInto(out *NbPolicyParameters) {
 	}
 	if in.SourcePostureChecks != nil {
 		in, out := &in.SourcePostureChecks, &out.SourcePostureChecks
-		*out = make([]string, len(*in))
-		copy(*out, *in)
+		*out = new([]string)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]string, len(*in))
+			copy(*out, *in)
+		}
 	}
 }
 

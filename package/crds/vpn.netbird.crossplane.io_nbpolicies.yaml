@@ -203,7 +203,6 @@ spec:
                 - enabled
                 - name
                 - rules
-                - source_posture_checks
                 type: object
               managementPolicies:
                 default:
@@ -511,7 +510,6 @@ spec:
                 - enabled
                 - name
                 - rules
-                - source_posture_checks
                 type: object
               conditions:
                 description: Conditions of the resource.

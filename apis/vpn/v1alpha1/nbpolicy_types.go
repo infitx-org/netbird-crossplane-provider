@@ -39,7 +39,7 @@ type NbPolicyParameters struct {
 	Rules []PolicyRule `json:"rules"`
 
 	// SourcePostureChecks Posture checks ID's applied to policy source groups
-	SourcePostureChecks []string `json:"source_posture_checks"`
+	SourcePostureChecks *[]string `json:"source_posture_checks,omitempty"`
 }
 
 // NbPolicyObservation are the observable fields of a NbPolicy.
@@ -59,7 +59,7 @@ type NbPolicyObservation struct {
 	Rules []PolicyRule `json:"rules"`
 
 	// SourcePostureChecks Posture checks ID's applied to policy source groups
-	SourcePostureChecks []string `json:"source_posture_checks"`
+	SourcePostureChecks *[]string `json:"source_posture_checks,omitempty"`
 }
 type PolicyRule struct {
 	// Action Policy rule accept or drops packets
