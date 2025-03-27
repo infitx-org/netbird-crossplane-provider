@@ -56,7 +56,7 @@ type NbPolicyObservation struct {
 	Name string `json:"name"`
 
 	// Rules Policy rule object for policy UI editor
-	Rules []PolicyRule `json:"rules"`
+	Rules *[]PolicyRule `json:"rules,omitempty"`
 
 	// SourcePostureChecks Posture checks ID's applied to policy source groups
 	SourcePostureChecks *[]string `json:"source_posture_checks,omitempty"`

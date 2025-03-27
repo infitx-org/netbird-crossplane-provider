@@ -214,7 +214,7 @@ func convertGroups(groupMinimums []nbapi.GroupMinimum) []v1alpha1.GroupMinimum {
 		groups[i] = v1alpha1.GroupMinimum{
 			Id: &g.Id,
 			//Issued:         &g.Issued,
-			Name:           g.Name,
+			Name:           &g.Name,
 			PeersCount:     g.PeersCount,
 			ResourcesCount: g.ResourcesCount,
 		}
@@ -244,7 +244,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	groupids := make([]string, len(cr.Spec.ForProvider.Groups))
 	for j, provgroup := range cr.Spec.ForProvider.Groups {
 		for _, apigroup := range groups {
-			if apigroup.Name == provgroup.Name {
+			if apigroup.Name == *provgroup.Name {
 				groupids[j] = apigroup.Id
 				break
 			}

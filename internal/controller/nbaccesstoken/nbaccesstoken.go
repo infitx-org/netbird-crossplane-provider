@@ -176,20 +176,27 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		fmt.Printf("didn't find externalname")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
-	users, err := c.service.nbCli.Users.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb for user: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, err
-	}
-	var apiuser nbapi.User
-	for _, user := range users {
-		if *user.IsServiceUser && (user.Name == cr.Spec.ForProvider.UserName) {
-			apiuser = user
+	var userid string
+	if cr.Spec.ForProvider.UserName == nil {
+		users, err := c.service.nbCli.Users.List(ctx)
+		if err != nil {
+			fmt.Printf("received error on call to nb for user: %+v", err)
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, err
 		}
+		var apiuser nbapi.User
+		for _, user := range users {
+			if *user.IsServiceUser && (user.Name == *cr.Spec.ForProvider.UserName) {
+				apiuser = user
+			}
+		}
+		userid = apiuser.Id
+	} else {
+		userid = *cr.Spec.ForProvider.UserId
 	}
-	accesstoken, err := c.service.nbCli.Tokens.Get(ctx, apiuser.Id, externalName)
+
+	accesstoken, err := c.service.nbCli.Tokens.Get(ctx, userid, externalName)
 	if err != nil {
 		fmt.Printf("received error on call to nb for accesstoken: %+v", accesstoken)
 		fmt.Printf("received error on call to nb for accesstoken: %+v", err)
@@ -226,18 +233,24 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Creating: %+v", cr)
-	users, err := c.service.nbCli.Users.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalCreation{}, err
-	}
-	var apiuser nbapi.User
-	for _, user := range users {
-		if user.Name == cr.Spec.ForProvider.UserName {
-			apiuser = user
+	var userid string
+	if cr.Spec.ForProvider.UserName == nil {
+		users, err := c.service.nbCli.Users.List(ctx)
+		if err != nil {
+			fmt.Printf("received error on call to nb: %+v", err)
+			return managed.ExternalCreation{}, err
 		}
+		var apiuser nbapi.User
+		for _, user := range users {
+			if user.Name == *cr.Spec.ForProvider.UserName {
+				apiuser = user
+			}
+		}
+		userid = apiuser.Id
+	} else {
+		userid = *cr.Spec.ForProvider.UserId
 	}
-	accesstoken, err := c.service.nbCli.Tokens.Create(ctx, apiuser.Id, nbapi.PersonalAccessTokenRequest{
+	accesstoken, err := c.service.nbCli.Tokens.Create(ctx, userid, nbapi.PersonalAccessTokenRequest{
 		ExpiresIn: cr.Spec.ForProvider.ExpiresIn,
 		Name:      cr.Spec.ForProvider.Name,
 	})
@@ -283,21 +296,22 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New("no externalname found")
 	}
 	fmt.Printf("Deleting: %+v", cr)
-	users, err := c.service.nbCli.Users.List(ctx)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return err
-	}
-	var apiuser nbapi.User
-	for _, user := range users {
-		if user.Name == cr.Spec.ForProvider.UserName {
-			apiuser = user
+	var userid string
+	if cr.Spec.ForProvider.UserName == nil {
+		users, err := c.service.nbCli.Users.List(ctx)
+		if err != nil {
+			fmt.Printf("received error on call to nb: %+v", err)
+			return err
 		}
+		var apiuser nbapi.User
+		for _, user := range users {
+			if user.Name == *cr.Spec.ForProvider.UserName {
+				apiuser = user
+			}
+		}
+		userid = apiuser.Id
+	} else {
+		userid = *cr.Spec.ForProvider.UserId
 	}
-	err = c.service.nbCli.Tokens.Delete(ctx, apiuser.Id, externalName)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return err
-	}
-	return nil
+	return c.service.nbCli.Tokens.Delete(ctx, userid, externalName)
 }

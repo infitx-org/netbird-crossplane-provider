@@ -11,15 +11,15 @@ spec:
     name: xplanepolicytest
     rules:
       - name: xplanepolicytestrule
-        action: allow
+        action: accept
         bidirectional: true
         description: test rule
         destinations:
-          - xplanegrouptest
+          - name: xplanegrouptest
         enabled: true
         port_ranges:
-          begin: 1000
-          end: 10000
+          - start: 180
+            end: 300
         protocol: tcp
         sources:
-          - xplanegrouptest2
+          - name: xplanegrouptest2
