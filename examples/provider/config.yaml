@@ -14,7 +14,7 @@ metadata:
   name: example-oauth-prov-secret
 type: Opaque
 data:
-  credentials: ewogICAgImNsaWVudF9pZCI6ICJuZXRiaXJkLWFwaS1hZG1pbiIsCiAgICAiY2xpZW50X3NlY3JldCI6ICIyNmFCTzBscFlnN0RadTVpaXd6WlExc1U0SjBvdFpYVUJMMnFkTUoyajUzYjdxM0N2em5UWktzY3Z0MkhxZFJKIiwKICAgICJncmFudF90eXBlIjogImNsaWVudF9jcmVkZW50aWFscyIsCiAgICAic2NvcGUiOiAib3BlbmlkIGVtYWlsIHByb2ZpbGUgdXJuOmlhbTpvcmc6cHJvamVjdDpyb2xlcyB1cm46eml0YWRlbDppYW06b3JnOnByb2plY3RzOnJvbGVzIHVybjp6aXRhZGVsOmlhbTpvcmc6cHJvamVjdDppZDozMTE5ODI3MjUxNTYzMDcyNTk6YXVkIgp9Cg==
+  credentials: ewogICAgImNsaWVudF9pZCI6ICJuZXRiaXJkLWFwaS1hZG1pbiIsCiAgICAiY2xpZW50X3NlY3JldCI6ICJ0eDQ1bmJyVXh4WE5sN2NNS0xBM2dpUGRQclEzaU03UVhRNXhJcWZNSXFvbWFabXA4bWI3aXZZV0FCVkZuTGhXIiwKICAgICJncmFudF90eXBlIjogImNsaWVudF9jcmVkZW50aWFscyIsCiAgICAic2NvcGUiOiAib3BlbmlkIGVtYWlsIHByb2ZpbGUgdXJuOmlhbTpvcmc6cHJvamVjdDpyb2xlcyB1cm46eml0YWRlbDppYW06b3JnOnByb2plY3RzOnJvbGVzIHVybjp6aXRhZGVsOmlhbTpvcmc6cHJvamVjdDppZDozMTIxNTg4MTc1MjM2MDAyMjc6YXVkIgp9Cg==
 ---
 # apiVersion: netbird.crossplane.io/v1alpha1
 # kind: ProviderConfig
@@ -33,14 +33,22 @@ data:
 apiVersion: netbird.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: example
+  name: netbird-crossplane-provider-config
 spec:
-  management-uri: https://netbird.scaws06.scaws06ccv2.drpp.global:443
+  management-uri: https://netbird.ccinfra.drpp-onprem.global:443
   credentials-type: oauth
-  oauth-issuer-url: https://zitadel.scaws06.scaws06ccv2.drpp.global/oauth/v2/token
+  oauth-issuer-url: https://zitadel.ccinfra.drpp-onprem.global/oauth/v2/token
   credentials:
     source: Secret
     secretRef:
       namespace: crossplane-system
       name: example-oauth-prov-secret
       key: credentials
+---
+# apiVersion: kubernetes.crossplane.io/v1alpha1
+# kind: ProviderConfig
+# metadata:
+#   name: kubernetes-crossplane-provider-config
+# spec:
+#   credentials:
+#     source: InjectedIdentity

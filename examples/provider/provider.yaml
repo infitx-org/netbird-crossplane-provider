@@ -11,6 +11,15 @@ kind: Provider
 metadata:
   name: netbird-crossplane-provider
 spec:
-  package: ghcr.io/infitx-org/netbird-crossplane-provider:v0.0.5-rc2
+  package: ghcr.io/infitx-org/netbird-crossplane-provider:v0.0.5-rc3
+  controllerConfigRef:
+    name: debug-config
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: kubernetes-crossplane-provider
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v0.15.0
   controllerConfigRef:
     name: debug-config

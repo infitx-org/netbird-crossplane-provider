@@ -1,0 +1,26 @@
+apiVersion: netbird.infitx.org/v1alpha1
+kind: PostConfig
+metadata:
+  name: example-post-config
+  namespace: default
+spec:
+  parameters:
+    ccClusterName: "cc-cluster-name"
+    environments:
+      - "dev"
+      - "qa"
+      - "prod"
+    setupKey:
+      name: "setup-key-name"
+      namespace: "default"
+      gwSetupKeySecretKey: "gw-setup-key-secret-key"
+      buildSetupKeySecretKey: "build-setup-key-secret-key"
+    zitadelProjectId: 312158817523600227
+    groupNames:
+      admin: techops-admin
+      externalAccess: techops-users
+  providerConfigsRef:
+    netbirdProviderConfigName: "netbird-crossplane-provider-config"
+    k8sProviderConfigName: "kubernetes-crossplane-provider-config"
+  managementPolicies:
+    - "*"
