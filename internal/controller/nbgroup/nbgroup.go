@@ -264,6 +264,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
-	return c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
-
+	err := c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
+	meta.SetExternalName(cr, "")
+	return err
 }
