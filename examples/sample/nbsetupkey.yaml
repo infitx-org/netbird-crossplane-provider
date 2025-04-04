@@ -10,11 +10,11 @@ spec:
     expires_in: 86400
     revoked: false
     auto_groups:
-      - cvgl584mo3bc73f03tg0
+      - cvjbojsmo3bc73f03ubg
     usage_limit: 0
     ephemeral: false
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"
   writeConnectionSecretToRef:
     name: setupkeysecret
     namespace: crossplane-system

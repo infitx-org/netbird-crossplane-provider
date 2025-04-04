@@ -24,4 +24,4 @@ spec:
       peer_login_expiration_enabled: true
       regular_users_view_blocked: true
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"

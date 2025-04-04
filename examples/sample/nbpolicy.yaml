@@ -4,7 +4,7 @@ metadata:
   name: xplanepolicytest
 spec:
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"
   forProvider:
     description: test policy
     enabled: true

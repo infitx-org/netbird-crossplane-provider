@@ -3,4 +3,4 @@ kind: Configuration
 metadata:
   name: netbird-post-config
 spec:
-  package: ghcr.io/mojaloop/iac-crossplane-packages/netbird:v1-14114480901-1
+  package: ghcr.io/mojaloop/iac-crossplane-packages/netbird:v1-14133655443-1

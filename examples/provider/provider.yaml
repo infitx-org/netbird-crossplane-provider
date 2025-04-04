@@ -11,7 +11,7 @@ kind: Provider
 metadata:
   name: netbird-crossplane-provider
 spec:
-  package: ghcr.io/infitx-org/netbird-crossplane-provider:v0.0.5-rc3
+  package: ghcr.io/infitx-org/netbird-crossplane-provider:v0.0.5-rc6
   controllerConfigRef:
     name: debug-config
 ---

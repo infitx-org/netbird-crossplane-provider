@@ -5,16 +5,15 @@ metadata:
   namespace: default
 spec:
   parameters:
-    ccClusterName: "cc-cluster-name"
+    ccClusterName: "fry-cluster-name"
     environments:
-      - "dev"
-      - "qa"
-      - "prod"
+      - "frydev"
+      - "fryqa"
     setupKey:
-      name: "setup-key-name"
+      name: "fry-setup-key-name"
       namespace: "default"
-      gwSetupKeySecretKey: "gw-setup-key-secret-key"
-      buildSetupKeySecretKey: "build-setup-key-secret-key"
+      gwSetupKeySecretKey: "fry-gw-setup-key-secret-key"
+      buildSetupKeySecretKey: "fry-build-setup-key-secret-key"
     zitadelProjectId: 312158817523600227
     groupNames:
       admin: techops-admin
