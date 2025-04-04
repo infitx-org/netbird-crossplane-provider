@@ -9,7 +9,7 @@ spec:
     - "Create"
     - "LateInitialize"
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"
   forProvider:
     disabled_management_groups:
       - cvel12smo3bc73brmsvg

@@ -1,13 +1,23 @@
-apiVersion: vpn.netbird.crossplane.io/v1alpha1
-kind: NbGroup
-metadata:
-  name: xplanegrouptest
-spec:
-  forProvider:
-    name: xplanegrouptest
-  providerConfigRef:
-    name: example
----
+# apiVersion: vpn.netbird.crossplane.io/v1alpha1
+# kind: NbGroup
+# metadata:
+#   name: xplanegrouptest
+# spec:
+#   forProvider:
+#     name: xplanegrouptest
+#   providerConfigRef:
+#     name: example
+# ---
+# apiVersion: vpn.netbird.crossplane.io/v1alpha1
+# kind: NbGroup
+# metadata:
+#   name: xplanegrouptest2
+# spec:
+#   forProvider:
+#     name: xplanegrouptest2
+#   providerConfigRef:
+#     name: example
+# ---
 apiVersion: vpn.netbird.crossplane.io/v1alpha1
 kind: NbGroup
 metadata:
@@ -16,4 +26,18 @@ spec:
   forProvider:
     name: xplanepeergrouptest
   providerConfigRef:
-    name: example
+    name: netbird-crossplane-provider-config
+---
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbGroup
+metadata:
+  annotations:
+    crossplane.io/external-name: All
+  name: all-group
+spec:
+  forProvider:
+    name: All
+  managementPolicies:
+    - Observe
+  providerConfigRef:
+    name: netbird-crossplane-provider-config

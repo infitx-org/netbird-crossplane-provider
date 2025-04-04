@@ -30,8 +30,9 @@ type NbAccessTokenParameters struct {
 	ExpiresIn int `json:"expires_in"`
 
 	// Name Name of the token
-	Name     string `json:"name"`
-	UserName string `json:"user_name"`
+	Name     string  `json:"name"`
+	UserName *string `json:"user_name,omitempty"`
+	UserId   *string `json:"user_id,omitempty"`
 }
 
 // NbAccessTokenObservation are the observable fields of a NbAccessToken.

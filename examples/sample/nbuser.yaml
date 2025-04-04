@@ -9,7 +9,7 @@ spec:
     - "Create"
     - "LateInitialize"
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"
   forProvider:
     email: david@infitx.com
     is_service_user: false
@@ -20,7 +20,7 @@ metadata:
   name: xplaneserviceusertest
 spec:
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"
   forProvider:
     name: testserviceuser
     is_service_user: true

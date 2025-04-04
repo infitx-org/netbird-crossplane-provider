@@ -107,8 +107,6 @@ spec:
                           description: ResourcesCount Count of resources associated
                             to the group
                           type: integer
-                      required:
-                      - name
                       type: object
                     type: array
                   name:
@@ -331,8 +329,6 @@ spec:
                           description: ResourcesCount Count of resources associated
                             to the group
                           type: integer
-                      required:
-                      - name
                       type: object
                     type: array
                   id:

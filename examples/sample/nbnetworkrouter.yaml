@@ -10,4 +10,4 @@ spec:
     peer_group_name: xplanepeergrouptest
     network_name: xplanenetworktest
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"

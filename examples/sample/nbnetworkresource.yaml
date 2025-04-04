@@ -13,4 +13,4 @@ spec:
     network_name: xplanenetworktest
 
   providerConfigRef:
-    name: example
+    name: "netbird-crossplane-provider-config"

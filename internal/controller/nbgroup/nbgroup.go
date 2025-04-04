@@ -164,22 +164,43 @@ type external struct {
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
+
 	cr, ok := mg.(*v1alpha1.NbGroup)
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbGroup)
 	}
+	fmt.Printf("observing: %+v", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
+		fmt.Printf("external name blank")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
-	group, err := c.service.nbCli.Groups.Get(ctx, externalName)
-	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil //return nil so that observe can return without error so that it passes to create.
-	}
+	var group nbapi.Group
+	if externalName != cr.Name {
+		fmt.Printf("external name: %+v", externalName)
+		groups, err := c.service.nbCli.Groups.List(ctx)
+		if err != nil {
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
 
+		for _, apigroup := range groups {
+			if apigroup.Name == externalName {
+				group = apigroup
+				break
+			}
+		}
+
+	} else {
+		apigroup, err := c.service.nbCli.Groups.Get(ctx, externalName)
+		if err != nil {
+			fmt.Printf("received error on call to nb: %+v", err)
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
+		}
+		group = *apigroup
+	}
+	fmt.Printf("setting atprovider")
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
 		Id:             group.Id,
 		Issued:         group.Issued,
@@ -243,6 +264,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 
 	fmt.Printf("Deleting: %+v", cr)
-	return c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
-
+	err := c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
+	meta.SetExternalName(cr, "")
+	return err
 }

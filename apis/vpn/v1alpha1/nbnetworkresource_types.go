@@ -52,7 +52,7 @@ type GroupMinimum struct {
 	Issued *string `json:"issued,omitempty"`
 
 	// Name Group Name identifier
-	Name string `json:"name"`
+	Name *string `json:"name,omitempty"`
 
 	// PeersCount Count of peers associated to the group
 	PeersCount int `json:"peers_count,omitempty"`

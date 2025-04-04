@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.14.0
-  name: nbaccesstokens.vpn.netbird.crossplane.io
+  name: nbpolicies.vpn.netbird.crossplane.io
 spec:
   group: vpn.netbird.crossplane.io
   names:
@@ -12,10 +12,10 @@ spec:
     - crossplane
     - managed
     - netbird
-    kind: NbAccessToken
-    listKind: NbAccessTokenList
-    plural: nbaccesstokens
-    singular: nbaccesstoken
+    kind: NbPolicy
+    listKind: NbPolicyList
+    plural: nbpolicies
+    singular: nbpolicy
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -34,7 +34,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A NbAccessToken is an example API type.
+        description: A NbPolicy is an example API type.
         properties:
           apiVersion:
             description: |-
@@ -54,7 +54,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: A NbAccessTokenSpec defines the desired state of a NbAccessToken.
+            description: A NbPolicySpec defines the desired state of a NbPolicy.
             properties:
               deletionPolicy:
                 default: Delete
@@ -71,21 +71,134 @@ spec:
                 - Delete
                 type: string
               forProvider:
-                description: NbAccessTokenParameters are the configurable fields of
-                  a NbAccessToken.
+                description: NbPolicyParameters are the configurable fields of a NbPolicy.
                 properties:
-                  expires_in:
-                    type: integer
+                  description:
+                    type: string
+                  enabled:
+                    description: Enabled Policy status
+                    type: boolean
                   name:
-                    description: Name Name of the token
+                    description: Name Policy name identifier
                     type: string
-                  user_id:
-                    type: string
-                  user_name:
-                    type: string
+                  rules:
+                    description: Rules Policy rule object for policy UI editor
+                    items:
+                      properties:
+                        action:
+                          description: Action Policy rule accept or drops packets
+                          type: string
+                        bidirectional:
+                          description: Bidirectional Define if the rule is applicable
+                            in both directions, sources, and destinations.
+                          type: boolean
+                        description:
+                          description: Description Policy rule friendly description
+                          type: string
+                        destinationResource:
+                          type: string
+                        destinations:
+                          description: Destinations Policy rule destination group
+                            IDs
+                          items:
+                            properties:
+                              id:
+                                description: Id Group ID
+                                type: string
+                              issued:
+                                description: Issued How the group was issued (api,
+                                  integration, jwt)
+                                type: string
+                              name:
+                                description: Name Group Name identifier
+                                type: string
+                              peers_count:
+                                description: PeersCount Count of peers associated
+                                  to the group
+                                type: integer
+                              resources_count:
+                                description: ResourcesCount Count of resources associated
+                                  to the group
+                                type: integer
+                            type: object
+                          type: array
+                        enabled:
+                          description: Enabled Policy rule status
+                          type: boolean
+                        id:
+                          description: Id Policy rule ID
+                          type: string
+                        name:
+                          description: Name Policy rule name identifier
+                          type: string
+                        port_ranges:
+                          description: PortRanges Policy rule affected ports ranges
+                            list
+                          items:
+                            properties:
+                              end:
+                                description: End The ending port of the range
+                                type: integer
+                              start:
+                                description: Start The starting port of the range
+                                type: integer
+                            required:
+                            - end
+                            - start
+                            type: object
+                          type: array
+                        ports:
+                          description: Ports Policy rule affected ports
+                          items:
+                            type: string
+                          type: array
+                        protocol:
+                          description: Protocol Policy rule type of the traffic
+                          type: string
+                        source_resource_name:
+                          type: string
+                        sources:
+                          description: Sources Policy rule source group IDs
+                          items:
+                            properties:
+                              id:
+                                description: Id Group ID
+                                type: string
+                              issued:
+                                description: Issued How the group was issued (api,
+                                  integration, jwt)
+                                type: string
+                              name:
+                                description: Name Group Name identifier
+                                type: string
+                              peers_count:
+                                description: PeersCount Count of peers associated
+                                  to the group
+                                type: integer
+                              resources_count:
+                                description: ResourcesCount Count of resources associated
+                                  to the group
+                                type: integer
+                            type: object
+                          type: array
+                      required:
+                      - action
+                      - bidirectional
+                      - enabled
+                      - name
+                      - protocol
+                      type: object
+                    type: array
+                  source_posture_checks:
+                    description: SourcePostureChecks Posture checks ID's applied to
+                      policy source groups
+                    items:
+                      type: string
+                    type: array
                 required:
-                - expires_in
+                - enabled
                 - name
+                - rules
                 type: object
               managementPolicies:
                 default:
@@ -255,36 +368,138 @@ spec:
             - forProvider
             type: object
           status:
-            description: A NbAccessTokenStatus represents the observed state of a
-              NbAccessToken.
+            description: A NbPolicyStatus represents the observed state of a NbPolicy.
             properties:
               atProvider:
-                description: NbAccessTokenObservation are the observable fields of
-                  a NbAccessToken.
+                description: NbPolicyObservation are the observable fields of a NbPolicy.
                 properties:
-                  created_at:
-                    description: CreatedAt Date the token was created
+                  description:
                     type: string
-                  created_by:
-                    description: CreatedBy User ID of the user who created the token
-                    type: string
-                  expiration_date:
-                    description: ExpirationDate Date the token expires
-                    type: string
+                  enabled:
+                    description: Enabled Policy status
+                    type: boolean
                   id:
-                    description: Id ID of a token
-                    type: string
-                  last_used:
-                    description: LastUsed Date the token was last used
+                    description: Id Policy ID
                     type: string
                   name:
-                    description: Name Name of the token
+                    description: Name Policy name identifier
                     type: string
+                  rules:
+                    description: Rules Policy rule object for policy UI editor
+                    items:
+                      properties:
+                        action:
+                          description: Action Policy rule accept or drops packets
+                          type: string
+                        bidirectional:
+                          description: Bidirectional Define if the rule is applicable
+                            in both directions, sources, and destinations.
+                          type: boolean
+                        description:
+                          description: Description Policy rule friendly description
+                          type: string
+                        destinationResource:
+                          type: string
+                        destinations:
+                          description: Destinations Policy rule destination group
+                            IDs
+                          items:
+                            properties:
+                              id:
+                                description: Id Group ID
+                                type: string
+                              issued:
+                                description: Issued How the group was issued (api,
+                                  integration, jwt)
+                                type: string
+                              name:
+                                description: Name Group Name identifier
+                                type: string
+                              peers_count:
+                                description: PeersCount Count of peers associated
+                                  to the group
+                                type: integer
+                              resources_count:
+                                description: ResourcesCount Count of resources associated
+                                  to the group
+                                type: integer
+                            type: object
+                          type: array
+                        enabled:
+                          description: Enabled Policy rule status
+                          type: boolean
+                        id:
+                          description: Id Policy rule ID
+                          type: string
+                        name:
+                          description: Name Policy rule name identifier
+                          type: string
+                        port_ranges:
+                          description: PortRanges Policy rule affected ports ranges
+                            list
+                          items:
+                            properties:
+                              end:
+                                description: End The ending port of the range
+                                type: integer
+                              start:
+                                description: Start The starting port of the range
+                                type: integer
+                            required:
+                            - end
+                            - start
+                            type: object
+                          type: array
+                        ports:
+                          description: Ports Policy rule affected ports
+                          items:
+                            type: string
+                          type: array
+                        protocol:
+                          description: Protocol Policy rule type of the traffic
+                          type: string
+                        source_resource_name:
+                          type: string
+                        sources:
+                          description: Sources Policy rule source group IDs
+                          items:
+                            properties:
+                              id:
+                                description: Id Group ID
+                                type: string
+                              issued:
+                                description: Issued How the group was issued (api,
+                                  integration, jwt)
+                                type: string
+                              name:
+                                description: Name Group Name identifier
+                                type: string
+                              peers_count:
+                                description: PeersCount Count of peers associated
+                                  to the group
+                                type: integer
+                              resources_count:
+                                description: ResourcesCount Count of resources associated
+                                  to the group
+                                type: integer
+                            type: object
+                          type: array
+                      required:
+                      - action
+                      - bidirectional
+                      - enabled
+                      - name
+                      - protocol
+                      type: object
+                    type: array
+                  source_posture_checks:
+                    description: SourcePostureChecks Posture checks ID's applied to
+                      policy source groups
+                    items:
+                      type: string
+                    type: array
                 required:
-                - created_at
-                - created_by
-                - expiration_date
-                - id
+                - enabled
                 - name
                 type: object
               conditions:
