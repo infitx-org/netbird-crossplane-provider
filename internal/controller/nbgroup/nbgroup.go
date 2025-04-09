@@ -182,12 +182,19 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		if err != nil {
 			return managed.ExternalObservation{ResourceExists: false}, nil
 		}
-
+		groupfound := false
 		for _, apigroup := range groups {
-			if apigroup.Name == externalName {
+			if apigroup.Id == externalName {
 				group = apigroup
+				groupfound = true
 				break
 			}
+		}
+		if !groupfound && meta.WasDeleted(mg) {
+			fmt.Printf("need to finish deletion")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil
 		}
 
 	} else {
@@ -200,6 +207,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}
 		group = *apigroup
 	}
+
 	fmt.Printf("setting atprovider")
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
 		Id:             group.Id,
@@ -265,6 +273,5 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 
 	fmt.Printf("Deleting: %+v", cr)
 	err := c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
-	meta.SetExternalName(cr, "")
 	return err
 }
