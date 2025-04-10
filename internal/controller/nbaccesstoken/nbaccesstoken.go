@@ -177,7 +177,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	var userid string
-	if cr.Spec.ForProvider.UserName == nil {
+	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
 			fmt.Printf("received error on call to nb for user: %+v", err)
