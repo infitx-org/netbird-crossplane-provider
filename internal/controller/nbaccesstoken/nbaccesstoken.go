@@ -48,7 +48,8 @@ const (
 	errGetPC            = "cannot get ProviderConfig"
 	errGetCreds         = "cannot get credentials"
 
-	errNewClient = "cannot create new Service"
+	errNewClient         = "cannot create new Service"
+	accessTokenSecretKey = "NB_API_KEY"
 )
 
 type NbService struct {
@@ -267,7 +268,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	meta.SetExternalName(cr, accesstoken.PersonalAccessToken.Id)
 
 	cd := managed.ConnectionDetails{
-		xpv1.ResourceCredentialsSecretPasswordKey: []byte(accesstoken.PlainToken),
+		accessTokenSecretKey: []byte(accesstoken.PlainToken),
 	}
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
