@@ -204,13 +204,18 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			ResourceExists: false,
 		}, nil
 	}
-	lastused := accesstoken.LastUsed.Local().String()
+	var lastused *string
+	if accesstoken.LastUsed != nil {
+		lastusedstring := accesstoken.LastUsed.Local().String()
+		lastused = &lastusedstring
+	}
+
 	cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{
 		Id:             accesstoken.Id,
 		CreatedAt:      accesstoken.CreatedBy,
 		ExpirationDate: accesstoken.ExpirationDate.Local().String(),
 		CreatedBy:      accesstoken.CreatedBy,
-		LastUsed:       &lastused,
+		LastUsed:       lastused,
 		Name:           accesstoken.Name,
 	}
 
