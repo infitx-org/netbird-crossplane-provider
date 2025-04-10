@@ -234,7 +234,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 
 	fmt.Printf("Creating: %+v", cr)
 	var userid string
-	if cr.Spec.ForProvider.UserName == nil {
+	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
 			fmt.Printf("received error on call to nb: %+v", err)
@@ -297,7 +297,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 	fmt.Printf("Deleting: %+v", cr)
 	var userid string
-	if cr.Spec.ForProvider.UserName == nil {
+	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
 			fmt.Printf("received error on call to nb: %+v", err)
