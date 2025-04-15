@@ -18,8 +18,9 @@ package nbnameserver
 
 import (
 	"context"
-	"fmt"
+	"reflect"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/pkg/errors"
@@ -172,9 +173,9 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbNameServer)
 	}
-
+	log := ctrl.LoggerFrom(ctx)
 	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	log.Info("Observing", "cr", cr)
 
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
@@ -182,7 +183,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	nameservergroup, err := c.service.nbCli.DNS.GetNameserverGroup(ctx, externalName)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		log.Error(err, "received error on call to nb")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
@@ -201,7 +202,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	cr.Status.SetConditions(xpv1.Available())
-	isUpToDate := IsNbNameServerUpToDate(*nameservergroup, cr.Status.AtProvider)
+	isUpToDate := IsNbNameServerUpToDate(*nameservergroup, cr.Status.AtProvider, log)
 	return managed.ExternalObservation{
 		ResourceExists:   true,
 		ResourceUpToDate: isUpToDate,
@@ -213,8 +214,8 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbNameServer)
 	}
-
-	fmt.Printf("Creating: %+v", cr)
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Creating", "cr", cr)
 	nameserverGroup, err := c.service.nbCli.DNS.CreateNameserverGroup(ctx, nbapi.PostApiDnsNameserversJSONRequestBody{
 		Description:          cr.Spec.ForProvider.Description,
 		Domains:              cr.Spec.ForProvider.Domains,
@@ -241,8 +242,8 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbNameServer)
 	}
-
-	fmt.Printf("Updating: %+v", cr)
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Updating", "cr", cr)
 
 	_, err := c.service.nbCli.DNS.UpdateNameserverGroup(ctx, meta.GetExternalName(cr), nbapi.PutApiDnsNameserversNsgroupIdJSONRequestBody{
 		Description:          cr.Spec.ForProvider.Description,
@@ -269,8 +270,8 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	if !ok {
 		return errors.New(errNotNbNameServer)
 	}
-
-	fmt.Printf("Deleting: %+v", cr)
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Deleting", "cr", cr)
 	c.service.nbCli.DNS.DeleteNameserverGroup(ctx, meta.GetExternalName(cr))
 
 	return nil
@@ -300,24 +301,41 @@ func NbtoApiNameServer(p []v1alpha1.Nameserver) *[]nbapi.Nameserver {
 	}
 	return &nameservers
 }
-func IsNbNameServerUpToDate(p nbapi.NameserverGroup, ns v1alpha1.NbNameServerObservation) bool {
+func IsNbNameServerUpToDate(p nbapi.NameserverGroup, ns v1alpha1.NbNameServerObservation, log logr.Logger) bool {
 	if !cmp.Equal(p.Description, ns.Description) {
+		log.Info("decription doesn't match")
 		return false
 	}
-	if !cmp.Equal(p.Domains, ns.Domains) {
+	if !reflect.DeepEqual(p.Domains, ns.Domains) {
+		log.Info("domains don't match")
 		return false
 	}
 	if !cmp.Equal(p.Enabled, ns.Enabled) {
+		log.Info("enabled doesn't match")
 		return false
 	}
-	if !cmp.Equal(p.Groups, ns.Groups) {
+	if !reflect.DeepEqual(p.Groups, ns.Groups) {
+		log.Info("groups don't match")
 		return false
 	}
 	if !cmp.Equal(p.Name, ns.Name) {
+		log.Info("name doesn't match")
 		return false
 	}
-	if !cmp.Equal(p.Nameservers, ns.Nameservers) {
+	if !cmp.Equal(len(p.Nameservers), len(ns.Nameservers)) {
+		log.Info("nameservers don't match")
 		return false
+	}
+	for i, pns := range p.Nameservers {
+		if !cmp.Equal(pns.Ip, ns.Nameservers[i].Ip) {
+			return false
+		}
+		if !cmp.Equal(string(pns.NsType), string(ns.Nameservers[i].NsType)) {
+			return false
+		}
+		if !cmp.Equal(pns.Port, ns.Nameservers[i].Port) {
+			return false
+		}
 	}
 	return true
 }

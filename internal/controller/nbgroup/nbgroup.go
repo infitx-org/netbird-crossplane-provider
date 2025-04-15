@@ -175,29 +175,33 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		fmt.Printf("external name blank")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+	fmt.Printf("external name: %+v", externalName)
 	var group nbapi.Group
-	if externalName != cr.Name {
-		fmt.Printf("external name: %+v", externalName)
+
+	//this only happens on first observe of resource that needs to be created
+	if externalName == cr.Name {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+	//by convention, for provider name = external name for existing resources with observe only
+	if externalName == cr.Spec.ForProvider.Name {
+		if meta.WasDeleted(mg) {
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
+		fmt.Printf("looking for existing group: %+v", cr.Spec.ForProvider.Name)
 		groups, err := c.service.nbCli.Groups.List(ctx)
 		if err != nil {
 			return managed.ExternalObservation{ResourceExists: false}, nil
 		}
-		groupfound := false
 		for _, apigroup := range groups {
-			if apigroup.Id == externalName {
+			if apigroup.Name == externalName {
+				fmt.Printf("found existing groupid: %+v", apigroup.Id)
 				group = apigroup
-				groupfound = true
 				break
 			}
 		}
-		if !groupfound && meta.WasDeleted(mg) {
-			fmt.Printf("need to finish deletion")
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, nil
-		}
-
-	} else {
+		meta.SetExternalName(cr, group.Id)
+	} else //now we are going to find by id using externalname assuming that this is a resource originally created by this provider
+	{
 		apigroup, err := c.service.nbCli.Groups.Get(ctx, externalName)
 		if err != nil {
 			fmt.Printf("received error on call to nb: %+v", err)
@@ -207,7 +211,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}
 		group = *apigroup
 	}
-
+	cr.Status.SetConditions(xpv1.Available())
 	fmt.Printf("setting atprovider")
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
 		Id:             group.Id,
@@ -217,12 +221,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		Resources:      group.Resources,
 		ResourcesCount: group.ResourcesCount,
 	}
-
-	cr.Status.SetConditions(xpv1.Available())
-
+	fmt.Printf("set atprovider id: %+v", cr.Status.AtProvider.Id)
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: true,
+		ResourceUpToDate: true, //since we don't update groups
 	}, nil
 }
 
