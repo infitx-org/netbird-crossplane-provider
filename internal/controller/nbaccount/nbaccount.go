@@ -197,6 +197,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	account := accounts[0]
 	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
+		Id:       account.Id,
 		Settings: *ApitoNbAccountSettings(account.Settings),
 		UserList: *ApitoNbAccountUsers(accountusers, allgroups),
 	}
@@ -205,9 +206,13 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.Settings, *ApitoNbAccountSettings(account.Settings)),
+		ResourceUpToDate:  isUpToDate(cr.Status, account),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
+}
+
+func isUpToDate(nbaccountstatus v1alpha1.NbAccountStatus, apiaccount api.Account) bool {
+	return reflect.DeepEqual(nbaccountstatus.AtProvider.Settings, apiaccount.Settings)
 }
 
 // this method should never be called since we don't create the account, only update settings
@@ -235,7 +240,8 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if accountId == "" {
 		return managed.ExternalUpdate{}, errors.New("can't find accountid")
 	}
-	accountsettings := NbToApiAccountSettings(cr.Status.AtProvider.Settings)
+	accountsettings := NbToApiAccountSettings(cr.Spec.ForProvider.Settings)
+	fmt.Printf("Updating with accountsettings: %+v", accountsettings)
 	_, err := c.service.nbCli.Accounts.Update(ctx, accountId, api.AccountRequest{
 		Settings: *accountsettings,
 	})
@@ -266,33 +272,38 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 func ApitoNbAccountSettings(p api.AccountSettings) *v1alpha1.AccountSettings {
 	accountsettings := v1alpha1.AccountSettings{
 		Extra:                           (*v1alpha1.AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
+		GroupsPropagationEnabled:        *p.GroupsPropagationEnabled,
+		JwtAllowGroups:                  *p.JwtAllowGroups,
+		JwtGroupsClaimName:              *p.JwtGroupsClaimName,
+		JwtGroupsEnabled:                *p.JwtGroupsEnabled,
 		PeerInactivityExpiration:        p.PeerInactivityExpiration,
 		PeerLoginExpiration:             p.PeerLoginExpiration,
 		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
 		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
 		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
+		RoutingPeerDnsResolutionEnabled: *p.RoutingPeerDnsResolutionEnabled,
 	}
 	return &accountsettings
 }
 
 func NbToApiAccountSettings(p v1alpha1.AccountSettings) *api.AccountSettings {
+	extrasettings := api.AccountExtraSettings{
+		NetworkTrafficLogsEnabled:          p.Extra.NetworkTrafficLogsEnabled,
+		NetworkTrafficPacketCounterEnabled: p.Extra.NetworkTrafficPacketCounterEnabled,
+		PeerApprovalEnabled:                p.Extra.PeerApprovalEnabled,
+	}
 	accountsettings := api.AccountSettings{
-		Extra:                           (*api.AccountExtraSettings)(p.Extra),
-		GroupsPropagationEnabled:        p.GroupsPropagationEnabled,
-		JwtAllowGroups:                  p.JwtAllowGroups,
-		JwtGroupsClaimName:              p.JwtGroupsClaimName,
-		JwtGroupsEnabled:                p.JwtGroupsEnabled,
+		Extra:                           &extrasettings,
+		GroupsPropagationEnabled:        &p.GroupsPropagationEnabled,
+		JwtAllowGroups:                  &p.JwtAllowGroups,
+		JwtGroupsClaimName:              &p.JwtGroupsClaimName,
+		JwtGroupsEnabled:                &p.JwtGroupsEnabled,
 		PeerInactivityExpiration:        p.PeerInactivityExpiration,
 		PeerLoginExpiration:             p.PeerLoginExpiration,
 		PeerInactivityExpirationEnabled: p.PeerInactivityExpirationEnabled,
 		PeerLoginExpirationEnabled:      p.PeerLoginExpirationEnabled,
 		RegularUsersViewBlocked:         p.RegularUsersViewBlocked,
-		RoutingPeerDnsResolutionEnabled: p.RoutingPeerDnsResolutionEnabled,
+		RoutingPeerDnsResolutionEnabled: &p.RoutingPeerDnsResolutionEnabled,
 	}
 	return &accountsettings
 }

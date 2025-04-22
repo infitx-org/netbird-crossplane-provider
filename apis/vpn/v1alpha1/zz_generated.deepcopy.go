@@ -48,34 +48,10 @@ func (in *AccountSettings) DeepCopyInto(out *AccountSettings) {
 		*out = new(AccountExtraSettings)
 		**out = **in
 	}
-	if in.GroupsPropagationEnabled != nil {
-		in, out := &in.GroupsPropagationEnabled, &out.GroupsPropagationEnabled
-		*out = new(bool)
-		**out = **in
-	}
 	if in.JwtAllowGroups != nil {
 		in, out := &in.JwtAllowGroups, &out.JwtAllowGroups
-		*out = new([]string)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]string, len(*in))
-			copy(*out, *in)
-		}
-	}
-	if in.JwtGroupsClaimName != nil {
-		in, out := &in.JwtGroupsClaimName, &out.JwtGroupsClaimName
-		*out = new(string)
-		**out = **in
-	}
-	if in.JwtGroupsEnabled != nil {
-		in, out := &in.JwtGroupsEnabled, &out.JwtGroupsEnabled
-		*out = new(bool)
-		**out = **in
-	}
-	if in.RoutingPeerDnsResolutionEnabled != nil {
-		in, out := &in.RoutingPeerDnsResolutionEnabled, &out.RoutingPeerDnsResolutionEnabled
-		*out = new(bool)
-		**out = **in
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 }
 

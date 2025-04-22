@@ -53,16 +53,16 @@ type AccountSettings struct {
 	Extra *AccountExtraSettings `json:"extra,omitempty"`
 
 	// GroupsPropagationEnabled Allows propagate the new user auto groups to peers that belongs to the user
-	GroupsPropagationEnabled *bool `json:"groups_propagation_enabled,omitempty"`
+	GroupsPropagationEnabled bool `json:"groups_propagation_enabled,omitempty"`
 
 	// JwtAllowGroups List of groups to which users are allowed access
-	JwtAllowGroups *[]string `json:"jwt_allow_groups,omitempty"`
+	JwtAllowGroups []string `json:"jwt_allow_groups,omitempty"`
 
 	// JwtGroupsClaimName Name of the claim from which we extract groups names to add it to account groups.
-	JwtGroupsClaimName *string `json:"jwt_groups_claim_name,omitempty"`
+	JwtGroupsClaimName string `json:"jwt_groups_claim_name,omitempty"`
 
 	// JwtGroupsEnabled Allows extract groups from JWT claim and add it to account groups.
-	JwtGroupsEnabled *bool `json:"jwt_groups_enabled,omitempty"`
+	JwtGroupsEnabled bool `json:"jwt_groups_enabled,omitempty"`
 
 	// PeerInactivityExpiration Period of time of inactivity after which peer session expires (seconds).
 	PeerInactivityExpiration int `json:"peer_inactivity_expiration"`
@@ -80,7 +80,7 @@ type AccountSettings struct {
 	RegularUsersViewBlocked bool `json:"regular_users_view_blocked"`
 
 	// RoutingPeerDnsResolutionEnabled Enables or disables DNS resolution on the routing peers
-	RoutingPeerDnsResolutionEnabled *bool `json:"routing_peer_dns_resolution_enabled,omitempty"`
+	RoutingPeerDnsResolutionEnabled bool `json:"routing_peer_dns_resolution_enabled,omitempty"`
 }
 
 type NbAccountUser struct {
