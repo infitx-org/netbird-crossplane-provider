@@ -15,11 +15,11 @@ spec:
         bidirectional: true
         description: test rule
         destinations:
-          - name: xplanegrouptest
+          - id: d052k623m95c738hj31g
         enabled: true
         port_ranges:
           - start: 180
             end: 300
         protocol: tcp
         sources:
-          - name: xplanegrouptest2
+          - id: d052jtq3m95c738hj2vg

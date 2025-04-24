@@ -293,12 +293,17 @@ func NbToApiPortRanges(rulePortRange *[]v1alpha1.RulePortRange) *[]nbapi.RulePor
 func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi.Group) *[]string {
 	ids := make([]string, len(*groupMinimums))
 	for i, gmin := range *groupMinimums {
-		for _, group := range groups {
-			if group.Name == *gmin.Name {
-				ids[i] = group.Id
-				break
+		if gmin.Id != nil {
+			ids[i] = *gmin.Id
+		} else {
+			for _, group := range groups {
+				if group.Name == *gmin.Name {
+					ids[i] = group.Id
+					break
+				}
 			}
 		}
+
 	}
 	return &ids
 }
