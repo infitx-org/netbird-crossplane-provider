@@ -19,6 +19,7 @@ package nbpolicy
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
@@ -33,7 +34,6 @@ import (
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
-	"github.com/google/go-cmp/cmp"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
 	"github.com/pkg/errors"
@@ -211,12 +211,16 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
+	rules, err := NbToApiRules(&cr.Spec.ForProvider.Rules, groups)
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
 	policy, err := c.service.nbCli.Policies.Create(ctx, nbapi.PostApiPoliciesJSONRequestBody{
 		Name:                cr.Spec.ForProvider.Name,
 		Description:         cr.Spec.ForProvider.Description,
 		Enabled:             cr.Spec.ForProvider.Enabled,
 		SourcePostureChecks: cr.Spec.ForProvider.SourcePostureChecks,
-		Rules:               NbToApiRules(&cr.Spec.ForProvider.Rules, groups),
+		Rules:               rules,
 	})
 	if err != nil {
 		fmt.Printf("err creating policy: %+v", err)
@@ -258,25 +262,33 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return c.service.nbCli.Policies.Delete(ctx, policyid)
 }
 
-func NbToApiRules(policyRule *[]v1alpha1.PolicyRule, groups []nbapi.Group) []nbapi.PolicyRuleUpdate {
+func NbToApiRules(policyRule *[]v1alpha1.PolicyRule, groups []nbapi.Group) ([]nbapi.PolicyRuleUpdate, error) {
 	fmt.Printf("Creating rules")
 	rules := make([]nbapi.PolicyRuleUpdate, len(*policyRule))
 	for i, prule := range *policyRule {
+		destinations, desterr := NbToApiGroupMinimums(prule.Destinations, groups)
+		if desterr != nil {
+			return nil, desterr
+		}
+		sources, sourceerr := NbToApiGroupMinimums(prule.Sources, groups)
+		if sourceerr != nil {
+			return nil, sourceerr
+		}
 		rules[i] = nbapi.PolicyRuleUpdate{
 			Action:        nbapi.PolicyRuleUpdateAction(prule.Action),
 			Bidirectional: prule.Bidirectional,
 			Description:   prule.Description,
-			Destinations:  NbToApiGroupMinimums(prule.Destinations, groups),
+			Destinations:  destinations,
 			Enabled:       prule.Enabled,
 			Id:            prule.Id,
 			Name:          prule.Name,
 			PortRanges:    NbToApiPortRanges(prule.PortRanges),
 			Ports:         prule.Ports,
 			Protocol:      nbapi.PolicyRuleUpdateProtocol(prule.Protocol),
-			Sources:       NbToApiGroupMinimums(prule.Sources, groups),
+			Sources:       sources,
 		}
 	}
-	return rules
+	return rules, nil
 }
 
 func NbToApiPortRanges(rulePortRange *[]v1alpha1.RulePortRange) *[]nbapi.RulePortRange {
@@ -290,26 +302,32 @@ func NbToApiPortRanges(rulePortRange *[]v1alpha1.RulePortRange) *[]nbapi.RulePor
 	return &rportrange
 }
 
-func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi.Group) *[]string {
+func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi.Group) (*[]string, error) {
 	ids := make([]string, len(*groupMinimums))
+	err := errors.New("couldnt resolve group")
 	for i, gmin := range *groupMinimums {
-		if gmin.Id != nil {
-			ids[i] = *gmin.Id
-		} else {
-			for _, group := range groups {
-				if group.Name == *gmin.Name {
+		for _, group := range groups {
+			if gmin.Id != nil && group.Id == *gmin.Id {
+				ids[i] = group.Id
+				err = nil
+				break
+			} else {
+				if gmin.Name != nil && group.Name == *gmin.Name {
 					ids[i] = group.Id
+					err = nil
 					break
 				}
 			}
 		}
-
 	}
-	return &ids
+	return &ids, err
 }
 
 func IsApiToNBPolicyUpToDate(nbPolicyObservation v1alpha1.NbPolicyObservation, policy *nbapi.Policy) bool {
-	return cmp.Equal(nbPolicyObservation.Enabled, policy.Enabled)
+	if nbPolicyObservation.Rules == nil || policy.Rules == nil {
+		return false
+	}
+	return reflect.DeepEqual(ApiToNBRules(policy.Rules), nbPolicyObservation.Rules)
 }
 func ApiToNBRules(p []nbapi.PolicyRule) *[]v1alpha1.PolicyRule {
 	rules := make([]v1alpha1.PolicyRule, len(p))
@@ -332,6 +350,9 @@ func ApiToNBRules(p []nbapi.PolicyRule) *[]v1alpha1.PolicyRule {
 }
 
 func ApiToNBPortRanges(rulePortRange *[]nbapi.RulePortRange) *[]v1alpha1.RulePortRange {
+	if rulePortRange == nil {
+		return nil
+	}
 	rportrange := make([]v1alpha1.RulePortRange, len(*rulePortRange))
 	for i, rulePort := range *rulePortRange {
 		rportrange[i] = v1alpha1.RulePortRange{
@@ -343,6 +364,9 @@ func ApiToNBPortRanges(rulePortRange *[]nbapi.RulePortRange) *[]v1alpha1.RulePor
 }
 
 func ApiToNBGroupMinimums(groupMinimum *[]nbapi.GroupMinimum) *[]v1alpha1.GroupMinimum {
+	if groupMinimum == nil {
+		return nil
+	}
 	groupminimums := make([]v1alpha1.GroupMinimum, len(*groupMinimum))
 	for i, gmin := range *groupMinimum {
 		groupminimums[i] = v1alpha1.GroupMinimum{

@@ -15,11 +15,37 @@ spec:
         bidirectional: true
         description: test rule
         destinations:
-          - id: d052k623m95c738hj31g
+          - id: d05l5aa3m95c73a9ldh0
         enabled: true
         port_ranges:
           - start: 180
             end: 300
         protocol: tcp
         sources:
-          - id: d052jtq3m95c738hj2vg
+          - id: d05l8mq3m95c73a9ldmg
+---
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbPolicy
+metadata:
+  name: xplanepolicytest2
+spec:
+  providerConfigRef:
+    name: "netbird-crossplane-provider-config"
+  forProvider:
+    description: test policy2
+    enabled: true
+    name: xplanepolicytest2
+    rules:
+      - name: xplanepolicytestrule2
+        action: accept
+        bidirectional: true
+        description: test rule
+        destinations:
+          - name: All
+        enabled: true
+        port_ranges:
+          - start: 180
+            end: 300
+        protocol: tcp
+        sources:
+          - name: All
