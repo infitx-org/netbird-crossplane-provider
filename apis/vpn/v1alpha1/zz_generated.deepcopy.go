@@ -1014,9 +1014,13 @@ func (in *NbNetworkResourceObservation) DeepCopyInto(out *NbNetworkResourceObser
 	}
 	if in.Groups != nil {
 		in, out := &in.Groups, &out.Groups
-		*out = make([]GroupMinimum, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+		*out = new([]GroupMinimum)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]GroupMinimum, len(*in))
+			for i := range *in {
+				(*in)[i].DeepCopyInto(&(*out)[i])
+			}
 		}
 	}
 }
@@ -1041,9 +1045,13 @@ func (in *NbNetworkResourceParameters) DeepCopyInto(out *NbNetworkResourceParame
 	}
 	if in.Groups != nil {
 		in, out := &in.Groups, &out.Groups
-		*out = make([]GroupMinimum, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+		*out = new([]GroupMinimum)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]GroupMinimum, len(*in))
+			for i := range *in {
+				(*in)[i].DeepCopyInto(&(*out)[i])
+			}
 		}
 	}
 }

@@ -184,6 +184,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			apinetwork = &network
 		}
 	}
+	if apinetwork == nil {
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, errors.New("network name not found")
+	}
 	networkresource, err := c.service.nbCli.Networks.Resources(apinetwork.Id).Get(ctx, externalName)
 	if err != nil {
 		return managed.ExternalObservation{
@@ -208,7 +213,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}, nil
 }
 
-func convertGroups(groupMinimums []nbapi.GroupMinimum) []v1alpha1.GroupMinimum {
+func convertGroups(groupMinimums []nbapi.GroupMinimum) *[]v1alpha1.GroupMinimum {
 	groups := make([]v1alpha1.GroupMinimum, len(groupMinimums))
 	for i, g := range groupMinimums {
 		groups[i] = v1alpha1.GroupMinimum{
@@ -219,7 +224,7 @@ func convertGroups(groupMinimums []nbapi.GroupMinimum) []v1alpha1.GroupMinimum {
 			ResourcesCount: g.ResourcesCount,
 		}
 	}
-	return groups
+	return &groups
 }
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
@@ -237,12 +242,15 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 			apinetwork = &network
 		}
 	}
+	if apinetwork == nil {
+		return managed.ExternalCreation{}, errors.New("network name not found")
+	}
 	groups, err := c.service.nbCli.Groups.List(ctx)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
-	groupids := make([]string, len(cr.Spec.ForProvider.Groups))
-	for j, provgroup := range cr.Spec.ForProvider.Groups {
+	groupids := make([]string, len(*cr.Spec.ForProvider.Groups))
+	for j, provgroup := range *cr.Spec.ForProvider.Groups {
 		for _, apigroup := range groups {
 			if apigroup.Name == *provgroup.Name {
 				groupids[j] = apigroup.Id

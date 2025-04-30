@@ -37,7 +37,7 @@ type NbNetworkResourceParameters struct {
 	Enabled bool `json:"enabled"`
 
 	// Groups Groups that the resource belongs to
-	Groups []GroupMinimum `json:"groups"`
+	Groups *[]GroupMinimum `json:"groups,omitempty"`
 
 	// Name Network resource name
 	Name string `json:"name"`
@@ -73,7 +73,7 @@ type NbNetworkResourceObservation struct {
 	Enabled bool `json:"enabled"`
 
 	// Groups Groups that the resource belongs to
-	Groups []GroupMinimum `json:"groups"`
+	Groups *[]GroupMinimum `json:"groups,omitempty"`
 
 	// Id Network Resource ID
 	Id string `json:"id"`

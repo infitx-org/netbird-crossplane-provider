@@ -8,9 +8,9 @@ spec:
     enabled: true
     name: testnetworkresource
     groups:
-      - name: "xplanegrouptest"
+      - name: "cc-k8s"
     address: "10.10.10.0/24"
-    network_name: xplanenetworktest
+    network_name: ccinfra2
 
   providerConfigRef:
     name: "netbird-crossplane-provider-config"

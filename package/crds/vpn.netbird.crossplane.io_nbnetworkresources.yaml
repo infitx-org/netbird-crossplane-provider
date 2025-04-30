@@ -117,7 +117,6 @@ spec:
                 required:
                 - address
                 - enabled
-                - groups
                 - name
                 - network_name
                 type: object
@@ -343,7 +342,6 @@ spec:
                 required:
                 - address
                 - enabled
-                - groups
                 - id
                 - name
                 - type
