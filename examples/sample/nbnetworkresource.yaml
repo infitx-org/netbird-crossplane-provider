@@ -10,7 +10,7 @@ spec:
     groups:
       - name: "cc-k8s"
     address: "10.10.10.0/24"
-    network_name: ccinfra2
+    network_name: ccinfra3
 
   providerConfigRef:
     name: "netbird-crossplane-provider-config"

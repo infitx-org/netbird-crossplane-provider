@@ -292,6 +292,9 @@ func NbToApiRules(policyRule *[]v1alpha1.PolicyRule, groups []nbapi.Group) ([]nb
 }
 
 func NbToApiPortRanges(rulePortRange *[]v1alpha1.RulePortRange) *[]nbapi.RulePortRange {
+	if rulePortRange == nil {
+		return nil
+	}
 	rportrange := make([]nbapi.RulePortRange, len(*rulePortRange))
 	for i, rulePort := range *rulePortRange {
 		rportrange[i] = nbapi.RulePortRange{

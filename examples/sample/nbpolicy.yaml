@@ -43,9 +43,6 @@ spec:
         destinations:
           - name: All
         enabled: true
-        port_ranges:
-          - start: 180
-            end: 300
-        protocol: tcp
         sources:
           - name: All
+        protocol: tcp
