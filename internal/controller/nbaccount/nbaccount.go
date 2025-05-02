@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -212,7 +213,42 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 }
 
 func isUpToDate(nbaccountstatus v1alpha1.NbAccountStatus, apiaccount api.Account) bool {
-	return reflect.DeepEqual(nbaccountstatus.AtProvider.Settings, apiaccount.Settings)
+	if !reflect.DeepEqual(nbaccountstatus.AtProvider.Settings.Extra, apiaccount.Settings.Extra) {
+		fmt.Printf("extra settings not equal")
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.GroupsPropagationEnabled, apiaccount.Settings.GroupsPropagationEnabled) {
+		return false
+	}
+	if !reflect.DeepEqual(nbaccountstatus.AtProvider.Settings.JwtAllowGroups, apiaccount.Settings.JwtAllowGroups) {
+		fmt.Printf("JwtAllowGroups not equal")
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.JwtGroupsClaimName, apiaccount.Settings.JwtGroupsClaimName) {
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.JwtGroupsEnabled, apiaccount.Settings.JwtGroupsEnabled) {
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerInactivityExpiration, apiaccount.Settings.PeerInactivityExpiration) {
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerInactivityExpirationEnabled, apiaccount.Settings.PeerInactivityExpirationEnabled) {
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerLoginExpiration, apiaccount.Settings.PeerLoginExpiration) {
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerLoginExpirationEnabled, apiaccount.Settings.PeerLoginExpirationEnabled) {
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.RegularUsersViewBlocked, apiaccount.Settings.RegularUsersViewBlocked) {
+		return false
+	}
+	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.RoutingPeerDnsResolutionEnabled, apiaccount.Settings.RoutingPeerDnsResolutionEnabled) {
+		return false
+	}
+	return true
 }
 
 // this method should never be called since we don't create the account, only update settings
