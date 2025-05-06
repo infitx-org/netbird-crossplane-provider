@@ -220,7 +220,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !*cr.Spec.ForProvider.IsServiceUser {
 		meta.SetExternalName(cr, apiuser.Id)
 	}
-	uptodate := IsUserUpToDate(cr.Status.AtProvider, *apiuser)
+	uptodate := IsUserUpToDate(cr.Spec.ForProvider, *apiuser)
 	cr.Status.SetConditions(xpv1.Available())
 
 	return managed.ExternalObservation{
@@ -293,7 +293,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	return nil
 }
 
-func IsUserUpToDate(user v1alpha1.NbUserObservation, apiUser nbapi.User) bool {
+func IsUserUpToDate(user v1alpha1.NbUserParameters, apiUser nbapi.User) bool {
 	if *user.IsServiceUser {
 		if !cmp.Equal(user.Name, apiUser.Name) {
 			return false

@@ -34,6 +34,7 @@ import (
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
+	"github.com/google/go-cmp/cmp"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
 	"github.com/pkg/errors"
@@ -182,7 +183,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
-	uptodate := IsApiToNBPolicyUpToDate(cr.Status.AtProvider, policy)
+	uptodate := IsApiToNBPolicyUpToDate(cr.Spec.ForProvider, policy)
 	cr.Status.AtProvider = v1alpha1.NbPolicyObservation{
 		Id:                  policy.Id,
 		Enabled:             policy.Enabled,
@@ -326,11 +327,37 @@ func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi
 	return &ids, err
 }
 
-func IsApiToNBPolicyUpToDate(nbPolicyObservation v1alpha1.NbPolicyObservation, policy *nbapi.Policy) bool {
-	if nbPolicyObservation.Rules == nil || policy.Rules == nil {
+func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi.Policy) bool {
+	fmt.Printf("IsApiToNBPolicyUpToDate with nbPolicy: %+v", nbPolicy)
+	fmt.Printf("IsApiToNBPolicyUpToDate with policy: %+v", policy)
+	if nbPolicy.Rules == nil || policy.Rules == nil {
+		fmt.Printf("rule nil")
 		return false
 	}
-	return reflect.DeepEqual(ApiToNBRules(policy.Rules), nbPolicyObservation.Rules)
+	policyrules := ApiToNBRules(policy.Rules)
+	for i, policyrule := range *policyrules {
+		if !cmp.Equal(policyrule.Description, policy.Rules[i].Description) {
+			fmt.Printf("Description doesn't match")
+			return false
+		}
+		if !cmp.Equal(policyrule.Action, string(policy.Rules[i].Action)) {
+			fmt.Printf("action doesn't match")
+			return false
+		}
+		if !cmp.Equal(policyrule.Bidirectional, policy.Rules[i].Bidirectional) {
+			fmt.Printf("bidirectional doesn't match")
+			return false
+		}
+		if !reflect.DeepEqual(*policyrule.Destinations, *ApiToNBGroupMinimums(policy.Rules[i].Destinations)) {
+			fmt.Printf("destinations don't match")
+			return false
+		}
+		if !reflect.DeepEqual(*policyrule.Sources, *ApiToNBGroupMinimums(policy.Rules[i].Sources)) {
+			fmt.Printf("sources don't match")
+			return false
+		}
+	}
+	return true
 }
 func ApiToNBRules(p []nbapi.PolicyRule) *[]v1alpha1.PolicyRule {
 	rules := make([]v1alpha1.PolicyRule, len(p))

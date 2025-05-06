@@ -202,7 +202,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	cr.Status.SetConditions(xpv1.Available())
-	isUpToDate := IsNbNameServerUpToDate(*nameservergroup, cr.Status.AtProvider, log)
+	isUpToDate := IsNbNameServerUpToDate(*nameservergroup, *cr, log)
 	return managed.ExternalObservation{
 		ResourceExists:   true,
 		ResourceUpToDate: isUpToDate,
@@ -301,39 +301,39 @@ func NbtoApiNameServer(p []v1alpha1.Nameserver) *[]nbapi.Nameserver {
 	}
 	return &nameservers
 }
-func IsNbNameServerUpToDate(p nbapi.NameserverGroup, ns v1alpha1.NbNameServerObservation, log logr.Logger) bool {
-	if !cmp.Equal(p.Description, ns.Description) {
+func IsNbNameServerUpToDate(p nbapi.NameserverGroup, ns v1alpha1.NbNameServer, log logr.Logger) bool {
+	if !cmp.Equal(p.Description, ns.Spec.ForProvider.Description) {
 		log.Info("decription doesn't match")
 		return false
 	}
-	if !reflect.DeepEqual(p.Domains, ns.Domains) {
+	if !reflect.DeepEqual(p.Domains, ns.Spec.ForProvider.Domains) {
 		log.Info("domains don't match")
 		return false
 	}
-	if !cmp.Equal(p.Enabled, ns.Enabled) {
+	if !cmp.Equal(p.Enabled, ns.Spec.ForProvider.Enabled) {
 		log.Info("enabled doesn't match")
 		return false
 	}
-	if !reflect.DeepEqual(p.Groups, ns.Groups) {
+	if !reflect.DeepEqual(p.Groups, ns.Spec.ForProvider.Groups) {
 		log.Info("groups don't match")
 		return false
 	}
-	if !cmp.Equal(p.Name, ns.Name) {
+	if !cmp.Equal(p.Name, ns.Spec.ForProvider.Name) {
 		log.Info("name doesn't match")
 		return false
 	}
-	if !cmp.Equal(len(p.Nameservers), len(ns.Nameservers)) {
+	if !cmp.Equal(len(p.Nameservers), len(ns.Spec.ForProvider.Nameservers)) {
 		log.Info("nameservers don't match")
 		return false
 	}
 	for i, pns := range p.Nameservers {
-		if !cmp.Equal(pns.Ip, ns.Nameservers[i].Ip) {
+		if !cmp.Equal(pns.Ip, ns.Spec.ForProvider.Nameservers[i].Ip) {
 			return false
 		}
-		if !cmp.Equal(string(pns.NsType), string(ns.Nameservers[i].NsType)) {
+		if !cmp.Equal(string(pns.NsType), string(ns.Spec.ForProvider.Nameservers[i].NsType)) {
 			return false
 		}
-		if !cmp.Equal(pns.Port, ns.Nameservers[i].Port) {
+		if !cmp.Equal(pns.Port, ns.Spec.ForProvider.Nameservers[i].Port) {
 			return false
 		}
 	}

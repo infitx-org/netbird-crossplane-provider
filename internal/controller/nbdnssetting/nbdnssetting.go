@@ -186,7 +186,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.DisabledManagementGroups, settings.DisabledManagementGroups),
+		ResourceUpToDate:  reflect.DeepEqual(cr.Spec.ForProvider.DisabledManagementGroups, settings.DisabledManagementGroups),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }

@@ -197,6 +197,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}, nil
 	}
 	account := accounts[0]
+	uptodate := isUpToDate(*cr, account)
 	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
 		Id:       account.Id,
 		Settings: *ApitoNbAccountSettings(account.Settings),
@@ -207,63 +208,63 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  isUpToDate(cr.Status, account),
+		ResourceUpToDate:  uptodate,
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-func isUpToDate(nbaccountstatus v1alpha1.NbAccountStatus, apiaccount api.Account) bool {
-	fmt.Printf("isuptodate, nbaccountstatus %+v", nbaccountstatus.AtProvider.Settings)
+func isUpToDate(nbaccount v1alpha1.NbAccount, apiaccount api.Account) bool {
+	fmt.Printf("isuptodate, nbaccount %+v", nbaccount.Spec.ForProvider.Settings)
 	fmt.Printf("isuptodate, apiaccount %+v", apiaccount.Settings)
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.Extra.NetworkTrafficLogsEnabled, apiaccount.Settings.Extra.NetworkTrafficLogsEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.Extra.NetworkTrafficLogsEnabled, apiaccount.Settings.Extra.NetworkTrafficLogsEnabled) {
 		fmt.Printf("extra settings NetworkTrafficLogsEnabled not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.Extra.NetworkTrafficPacketCounterEnabled, apiaccount.Settings.Extra.NetworkTrafficPacketCounterEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.Extra.NetworkTrafficPacketCounterEnabled, apiaccount.Settings.Extra.NetworkTrafficPacketCounterEnabled) {
 		fmt.Printf("extra settings NetworkTrafficPacketCounterEnabled not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.Extra.PeerApprovalEnabled, apiaccount.Settings.Extra.PeerApprovalEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.Extra.PeerApprovalEnabled, apiaccount.Settings.Extra.PeerApprovalEnabled) {
 		fmt.Printf("extra settings PeerApprovalEnabled not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.GroupsPropagationEnabled, *apiaccount.Settings.GroupsPropagationEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.GroupsPropagationEnabled, *apiaccount.Settings.GroupsPropagationEnabled) {
 		fmt.Printf("GroupsPropagationEnabled not equal")
 		return false
 	}
-	if !reflect.DeepEqual(nbaccountstatus.AtProvider.Settings.JwtAllowGroups, *apiaccount.Settings.JwtAllowGroups) {
+	if !reflect.DeepEqual(nbaccount.Spec.ForProvider.Settings.JwtAllowGroups, *apiaccount.Settings.JwtAllowGroups) {
 		fmt.Printf("JwtAllowGroups not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.JwtGroupsClaimName, *apiaccount.Settings.JwtGroupsClaimName) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.JwtGroupsClaimName, *apiaccount.Settings.JwtGroupsClaimName) {
 		fmt.Printf("JwtGroupsClaimName not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.JwtGroupsEnabled, *apiaccount.Settings.JwtGroupsEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.JwtGroupsEnabled, *apiaccount.Settings.JwtGroupsEnabled) {
 		fmt.Printf("JwtGroupsEnabled not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerInactivityExpiration, apiaccount.Settings.PeerInactivityExpiration) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerInactivityExpiration, apiaccount.Settings.PeerInactivityExpiration) {
 		fmt.Printf("PeerInactivityExpiration not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerInactivityExpirationEnabled, apiaccount.Settings.PeerInactivityExpirationEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerInactivityExpirationEnabled, apiaccount.Settings.PeerInactivityExpirationEnabled) {
 		fmt.Printf("PeerInactivityExpirationEnabled not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerLoginExpiration, apiaccount.Settings.PeerLoginExpiration) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerLoginExpiration, apiaccount.Settings.PeerLoginExpiration) {
 		fmt.Printf("PeerLoginExpiration not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.PeerLoginExpirationEnabled, apiaccount.Settings.PeerLoginExpirationEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerLoginExpirationEnabled, apiaccount.Settings.PeerLoginExpirationEnabled) {
 		fmt.Printf("PeerLoginExpirationEnabled not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.RegularUsersViewBlocked, apiaccount.Settings.RegularUsersViewBlocked) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.RegularUsersViewBlocked, apiaccount.Settings.RegularUsersViewBlocked) {
 		fmt.Printf("RegularUsersViewBlocked not equal")
 		return false
 	}
-	if !cmp.Equal(nbaccountstatus.AtProvider.Settings.RoutingPeerDnsResolutionEnabled, *apiaccount.Settings.RoutingPeerDnsResolutionEnabled) {
+	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.RoutingPeerDnsResolutionEnabled, *apiaccount.Settings.RoutingPeerDnsResolutionEnabled) {
 		fmt.Printf("RoutingPeerDnsResolutionEnabled not equal")
 		return false
 	}
