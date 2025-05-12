@@ -288,12 +288,45 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbNetworkResource)
 	}
-	//networkid := meta.GetExternalName(cr)
+	networkResourceId := meta.GetExternalName(cr)
 	fmt.Printf("Updating: %+v", cr)
-	//todo
-	// if err != nil {
-	// 	return managed.ExternalUpdate{}, err
-	// }
+	networks, err := c.service.nbCli.Networks.List(ctx)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
+	var apinetwork *nbapi.Network
+	for _, network := range networks {
+		if network.Name == cr.Spec.ForProvider.NetworkName {
+			apinetwork = &network
+		}
+	}
+	if apinetwork == nil {
+		return managed.ExternalUpdate{}, errors.New("network name not found")
+	}
+	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
+	groupids := make([]string, len(*cr.Spec.ForProvider.Groups))
+	for j, provgroup := range *cr.Spec.ForProvider.Groups {
+		for _, apigroup := range groups {
+			if apigroup.Name == *provgroup.Name {
+				groupids[j] = apigroup.Id
+				break
+			}
+		}
+	}
+
+	_, err2 := c.service.nbCli.Networks.Resources(apinetwork.Id).Update(ctx, networkResourceId, nbapi.PutApiNetworksNetworkIdResourcesResourceIdJSONRequestBody{
+		Enabled:     cr.Spec.ForProvider.Enabled,
+		Address:     cr.Spec.ForProvider.Address,
+		Description: cr.Spec.ForProvider.Description,
+		Groups:      groupids,
+		Name:        cr.Spec.ForProvider.Name,
+	})
+	if err2 != nil {
+		return managed.ExternalUpdate{}, err
+	}
 
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
