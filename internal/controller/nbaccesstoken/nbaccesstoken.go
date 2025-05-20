@@ -19,8 +19,11 @@ package nbaccesstoken
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -186,11 +189,16 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 				ResourceExists: false,
 			}, err
 		}
-		var apiuser nbapi.User
+		var apiuser *nbapi.User
 		for _, user := range users {
 			if *user.IsServiceUser && (user.Name == *cr.Spec.ForProvider.UserName) {
-				apiuser = user
+				apiuser = &user
 			}
+		}
+		if apiuser == nil {
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, errors.New("username doesn't exist")
 		}
 		userid = apiuser.Id
 	} else {
@@ -210,7 +218,20 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		lastusedstring := accesstoken.LastUsed.Local().String()
 		lastused = &lastusedstring
 	}
-
+	if accesstoken.ExpirationDate.Before(time.Now()) {
+		cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{}
+		cr.Status.SetConditions(xpv1.Condition{Type: "Expired",
+			Status:             v1.ConditionTrue,
+			Reason:             "TimestampExpired",
+			Message:            "Resource has expired and needs recreation",
+			LastTransitionTime: metav1.Now(),
+		})
+		return managed.ExternalObservation{
+			ResourceExists:    true,
+			ResourceUpToDate:  false,
+			ConnectionDetails: managed.ConnectionDetails{},
+		}, nil
+	}
 	cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{
 		Id:             accesstoken.Id,
 		CreatedAt:      accesstoken.CreatedBy,
@@ -219,18 +240,34 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		LastUsed:       lastused,
 		Name:           accesstoken.Name,
 	}
-
-	cr.Status.SetConditions(xpv1.Available())
+	cr.Status.SetConditions(xpv1.Available(), xpv1.Condition{Type: "Expired",
+		Status:             v1.ConditionFalse,
+		Reason:             "TimestampExpired",
+		Message:            "Resource has expired and needs recreation",
+		LastTransitionTime: metav1.Now(),
+	})
 	return managed.ExternalObservation{
 		ResourceExists:    true,
-		ResourceUpToDate:  true, //isUpToDate(&cr.Spec.ForProvider, accesstoken),
+		ResourceUpToDate:  true,
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-// func isUpToDate(nbAccessTokenParameters *v1alpha1.NbAccessTokenParameters, accesstoken *nbapi.PersonalAccessToken) bool {
-// 	return true //need to determine how to refresh token when expires
-// }
+func (c *external) getUserID(ctx context.Context, cr *v1alpha1.NbAccessToken) (string, error) {
+	if cr.Spec.ForProvider.UserName != nil {
+		users, err := c.service.nbCli.Users.List(ctx)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to list users")
+		}
+		for _, user := range users {
+			if user.Name == *cr.Spec.ForProvider.UserName {
+				return user.Id, nil
+			}
+		}
+		return "", errors.New("user not found")
+	}
+	return *cr.Spec.ForProvider.UserId, nil
+}
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr, ok := mg.(*v1alpha1.NbAccessToken)
@@ -277,6 +314,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
+// for now only called when token expired
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
 	cr, ok := mg.(*v1alpha1.NbAccessToken)
 	if !ok {
@@ -284,10 +322,21 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	fmt.Printf("Updating: %+v", cr)
+	externalName := meta.GetExternalName(cr)
+	if externalName == "" {
+		return managed.ExternalUpdate{}, errors.New("no externalname found")
+	}
+	userid, err := c.getUserID(ctx, cr)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
 
+	// 2. Delete the expired token
+	if err := c.service.nbCli.Tokens.Delete(ctx, userid, externalName); err != nil {
+		return managed.ExternalUpdate{}, errors.Wrap(err, "failed to delete expired token")
+	}
+	meta.SetExternalName(cr, "")
 	return managed.ExternalUpdate{
-		// Optionally return any details that may be required to connect to the
-		// external resource. These will be stored as the connection secret.
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
