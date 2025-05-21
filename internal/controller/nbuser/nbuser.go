@@ -265,7 +265,9 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 
 	fmt.Printf("Updating: %+v", cr)
 	_, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
-		Role: cr.Spec.ForProvider.Role,
+		Role:       cr.Spec.ForProvider.Role,
+		AutoGroups: *cr.Status.AtProvider.AutoGroups,
+		IsBlocked:  false,
 	})
 	if err != nil {
 		return managed.ExternalUpdate{}, err
