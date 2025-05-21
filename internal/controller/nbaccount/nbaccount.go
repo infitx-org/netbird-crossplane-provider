@@ -365,14 +365,20 @@ func NbToApiAccountSettings(p v1alpha1.AccountSettings) *api.AccountSettings {
 }
 
 func ApitoNbAccountUsers(accountusers []api.User, allgroups []api.Group) *[]v1alpha1.NbAccountUser {
-	nbaccountusers := make([]v1alpha1.NbAccountUser, len(accountusers))
-	for i, accountuser := range accountusers {
-		nbaccountusers[i] = v1alpha1.NbAccountUser{
+	var nbaccountusers []v1alpha1.NbAccountUser
+
+	for _, accountuser := range accountusers {
+		if accountuser.IsServiceUser == nil || *accountuser.IsServiceUser {
+			continue
+		}
+
+		nbaccountusers = append(nbaccountusers, v1alpha1.NbAccountUser{
 			UserEmail: accountuser.Email,
 			Groups:    *GetGroupIds(accountuser.AutoGroups, allgroups),
 			Role:      accountuser.Role,
-		}
+		})
 	}
+
 	return &nbaccountusers
 }
 
