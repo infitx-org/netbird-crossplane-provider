@@ -180,7 +180,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	var apiuser *nbapi.User
 	if !*cr.Spec.ForProvider.IsServiceUser {
 		for _, user := range users {
-			if user.Email == cr.Spec.ForProvider.Email {
+			if cr.Spec.ForProvider.Email != "" && user.Email == cr.Spec.ForProvider.Email {
 				apiuser = &user
 			}
 		}
