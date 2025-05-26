@@ -12,4 +12,4 @@ spec:
     name: "netbird-crossplane-provider-config"
   forProvider:
     disabled_management_groups:
-      - cvel12smo3bc73brmsvg
+      - d0ci90kmo3bc73e51c7g
