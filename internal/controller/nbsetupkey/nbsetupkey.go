@@ -187,7 +187,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	cr.Status.AtProvider = v1alpha1.NbSetupKeyObservation{
 		Id:                  setupkey.Id,
 		AllowExtraDnsLabels: setupkey.AllowExtraDnsLabels,
-		AutoGroups:          setupkey.AutoGroups,
+		AutoGroups:          &setupkey.AutoGroups,
 		Ephemeral:           setupkey.Ephemeral,
 		Expires:             setupkey.Expires.String(),
 		LastUsed:            setupkey.LastUsed.String(),
@@ -247,20 +247,6 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 	log.Info("created Setupkey", "setupkey", setupkey)
 	meta.SetExternalName(cr, setupkey.Id)
-	//updating atprovider due to required status
-	cr.Status.AtProvider = v1alpha1.NbSetupKeyObservation{
-		Id:                  setupkey.Id,
-		AllowExtraDnsLabels: setupkey.AllowExtraDnsLabels,
-		AutoGroups:          setupkey.AutoGroups,
-		Ephemeral:           setupkey.Ephemeral,
-		Expires:             setupkey.Expires.String(),
-		LastUsed:            setupkey.LastUsed.String(),
-		Name:                setupkey.Name,
-		Revoked:             setupkey.Revoked,
-		State:               setupkey.State,
-		Type:                setupkey.Type,
-	}
-	log.Info("set Setupkey at provider")
 	cd := managed.ConnectionDetails{xpv1.ResourceCredentialsSecretPasswordKey: []byte(setupkey.Key)}
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the

@@ -9,6 +9,7 @@ require (
 	github.com/crossplane/crossplane-tools v0.0.0-20230925130601-628280f8bf79
 	github.com/google/go-cmp v0.6.0
 	github.com/pkg/errors v0.9.1
+	github.com/stretchr/testify v1.10.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	k8s.io/apimachinery v0.29.2
 	k8s.io/client-go v0.29.2
@@ -17,7 +18,9 @@ require (
 )
 
 require (
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 )
 
