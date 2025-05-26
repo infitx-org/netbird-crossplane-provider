@@ -16,9 +16,9 @@ spec:
         peer_approval_enabled: false
       groups_propagation_enabled: true
       jwt_allow_groups:
-        - "316780951722002844:techops-admin"
-        - "316780951722002844:techops-users"
-      jwt_groups_claim_name: "zitadel:grants"
+        - 320281211572340133:techops-admin
+        - 320281211572340133:techops-users
+      jwt_groups_claim_name: zitadel:grants
       jwt_groups_enabled: true
       peer_inactivity_expiration: 0
       peer_inactivity_expiration_enabled: false

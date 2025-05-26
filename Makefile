@@ -94,10 +94,7 @@ dev: $(KIND) $(KUBECTL) $(HELM)
 	@$(INFO) Installing Crossplane CRDs
 	@$(HELM) repo add crossplane-stable https://charts.crossplane.io/stable
 	@$(HELM) upgrade --install crossplane --namespace crossplane-system --create-namespace crossplane-stable/crossplane
-	@$(INFO) Installing Provider Netbird CRDs
-	@$(KUBECTL) apply -R -f package/crds
-	@$(INFO) Starting Provider Netbird controllers
-	@$(GO) run cmd/provider/main.go --debug
+
 
 dev-clean: $(KIND) $(KUBECTL)
 	@$(INFO) Deleting kind cluster

@@ -14,10 +14,10 @@ spec:
     enabled: true
     name: nameservertest
     nameservers:
-      - ip: "8.8.8.8"
+      - ip: "1.1.1.1"
         ns_type: "udp"
         port: 53
     primary: false
     search_domains_enabled: true
     groups:
-      - cvv4cbcmo3bc73fpoan0
+      - d0ci90kmo3bc73e51c7g
