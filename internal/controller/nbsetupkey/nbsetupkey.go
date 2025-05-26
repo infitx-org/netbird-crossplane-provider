@@ -18,9 +18,9 @@ package nbsetupkey
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -174,9 +174,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Observing Setupkey", "cr", cr)
 	setupkey, err := c.service.nbCli.SetupKeys.Get(ctx, externalName)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		log.Error(err, "received error on call to nb")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
@@ -199,16 +201,19 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:    true,
-		ResourceUpToDate:  isUpToDate(&cr.Spec.ForProvider, setupkey),
+		ResourceUpToDate:  isUpToDate(&cr.Spec.ForProvider, setupkey, log),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-func isUpToDate(nbSetupKeyParameters *v1alpha1.NbSetupKeyParameters, setupkey *api.SetupKey) bool {
+func isUpToDate(nbSetupKeyParameters *v1alpha1.NbSetupKeyParameters, setupkey *api.SetupKey, log logr.Logger) bool {
+
 	if !reflect.DeepEqual(nbSetupKeyParameters.AutoGroups, setupkey.AutoGroups) {
+		log.Info("update failed on auto groups")
 		return false
 	}
 	if !cmp.Equal(nbSetupKeyParameters.Revoked, setupkey.Revoked) {
+		log.Info("update failed on revoked")
 		return false
 	}
 	return true
@@ -220,7 +225,8 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotNbSetupKey)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Creating Setupkey", "cr", cr)
 	setupkey, err := c.service.nbCli.SetupKeys.Create(ctx, api.PostApiSetupKeysJSONRequestBody{
 		Name:                cr.Spec.ForProvider.Name,
 		AllowExtraDnsLabels: &cr.Spec.ForProvider.AllowExtraDnsLabels,
@@ -232,14 +238,14 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	})
 
 	if err != nil {
-		fmt.Printf("err creating setupkey: %+v", err)
+		log.Error(err, "err creating setupkey")
 		return managed.ExternalCreation{
 			// Optionally return any details that may be required to connect to the
 			// external resource. These will be stored as the connection secret.
 			ConnectionDetails: managed.ConnectionDetails{},
 		}, err
 	}
-	fmt.Printf("setupkey created: %+v", setupkey)
+	log.Info("created Setupkey", "setupkey", setupkey)
 	meta.SetExternalName(cr, setupkey.Id)
 
 	cd := managed.ConnectionDetails{xpv1.ResourceCredentialsSecretPasswordKey: []byte(setupkey.Key)}
@@ -256,7 +262,8 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbSetupKey)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Updating Setupkey", "cr", cr)
 	setupKeyId := meta.GetExternalName(cr)
 	if setupKeyId == "" {
 		return managed.ExternalUpdate{}, errors.New("can't find setupKeyId")
@@ -282,7 +289,8 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotNbSetupKey)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Deleting Setupkey", "cr", cr)
 
 	return c.service.nbCli.SetupKeys.Delete(ctx, meta.GetExternalName(cr))
 }
