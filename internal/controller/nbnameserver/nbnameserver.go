@@ -272,9 +272,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Deleting", "cr", cr)
-	c.service.nbCli.DNS.DeleteNameserverGroup(ctx, meta.GetExternalName(cr))
-
-	return nil
+	return c.service.nbCli.DNS.DeleteNameserverGroup(ctx, meta.GetExternalName(cr))
 }
 
 func ApitoNbNameServer(p []nbapi.Nameserver) *[]v1alpha1.Nameserver {
