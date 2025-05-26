@@ -187,7 +187,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	cr.Status.AtProvider = v1alpha1.NbSetupKeyObservation{
 		Id:                  setupkey.Id,
 		AllowExtraDnsLabels: setupkey.AllowExtraDnsLabels,
-		AutoGroups:          setupkey.AutoGroups,
+		AutoGroups:          &setupkey.AutoGroups,
 		Ephemeral:           setupkey.Ephemeral,
 		Expires:             setupkey.Expires.String(),
 		LastUsed:            setupkey.LastUsed.String(),

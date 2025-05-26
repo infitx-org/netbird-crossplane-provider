@@ -57,7 +57,7 @@ type NbSetupKeyObservation struct {
 	AllowExtraDnsLabels bool `json:"allow_extra_dns_labels"`
 
 	// AutoGroups List of group IDs to auto-assign to peers registered with this key
-	AutoGroups []string `json:"auto_groups,omitempty"`
+	AutoGroups *[]string `json:"auto_groups,omitempty"`
 
 	// Ephemeral Indicate that the peer will be ephemeral or not
 	Ephemeral bool `json:"ephemeral"`
