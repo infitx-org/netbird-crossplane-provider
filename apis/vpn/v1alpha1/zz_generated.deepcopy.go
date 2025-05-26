@@ -1510,12 +1510,8 @@ func (in *NbSetupKeyObservation) DeepCopyInto(out *NbSetupKeyObservation) {
 	*out = *in
 	if in.AutoGroups != nil {
 		in, out := &in.AutoGroups, &out.AutoGroups
-		*out = new([]string)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]string, len(*in))
-			copy(*out, *in)
-		}
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 }
 
