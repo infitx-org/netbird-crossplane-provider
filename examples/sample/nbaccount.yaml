@@ -11,17 +11,21 @@ spec:
   forProvider:
     settings:
       extra:
+        network_traffic_logs_enabled: false
+        network_traffic_packet_counter_enabled: false
         peer_approval_enabled: false
       groups_propagation_enabled: true
       jwt_allow_groups:
-        - "312158817523600227:techops-admin"
-        - "312158817523600227:techops-users"
-      jwt_groups_claim_name: "zitadel:grants"
+        - 321298644982571809:techops-admin
+        - 321298644982571809:techops-users
+      jwt_groups_claim_name: zitadel:grants
       jwt_groups_enabled: true
       peer_inactivity_expiration: 0
       peer_inactivity_expiration_enabled: false
       peer_login_expiration: 86400
       peer_login_expiration_enabled: true
       regular_users_view_blocked: true
+      routing_peer_dns_resolution_enabled: true
+
   providerConfigRef:
     name: "netbird-crossplane-provider-config"

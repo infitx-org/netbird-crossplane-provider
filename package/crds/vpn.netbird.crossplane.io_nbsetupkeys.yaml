@@ -339,7 +339,6 @@ spec:
                     type: boolean
                 required:
                 - allow_extra_dns_labels
-                - auto_groups
                 - ephemeral
                 - expires
                 - id

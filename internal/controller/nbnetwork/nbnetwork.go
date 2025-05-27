@@ -18,7 +18,6 @@ package nbnetwork
 
 import (
 	"context"
-	"fmt"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
@@ -29,11 +28,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/google/go-cmp/cmp"
 	apisv1alpha1 "github.com/crossplane/netbird-crossplane-provider/apis/v1alpha1"
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
 	"github.com/pkg/errors"
@@ -161,6 +161,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -168,14 +169,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbNetwork)
 	}
-	fmt.Printf("observing network: %+v", cr)
+	c.log.Info("observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	network, err := c.service.nbCli.Networks.Get(ctx, externalName)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb getting networks")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
@@ -214,21 +215,19 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbNetwork)
 	}
-	fmt.Printf("creating network: %+v", cr)
+	c.log.Info("creating", "cr", cr)
 	network, err := c.service.nbCli.Networks.Create(ctx, nbapi.NetworkRequest{
 		Name:        cr.Spec.ForProvider.Name,
 		Description: &cr.Spec.ForProvider.Description,
 	})
 
 	if err != nil {
-		fmt.Printf("err creating network: %+v", err)
 		return managed.ExternalCreation{
 			// Optionally return any details that may be required to connect to the
 			// external resource. These will be stored as the connection secret.
 			ConnectionDetails: managed.ConnectionDetails{},
 		}, err
 	}
-	fmt.Printf("network created: %+v", network)
 	meta.SetExternalName(cr, network.Id)
 	return managed.ExternalCreation{}, nil
 }
@@ -239,7 +238,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbNetwork)
 	}
 	networkid := meta.GetExternalName(cr)
-	fmt.Printf("Updating: %+v", cr)
+	c.log.Info("Updating", "cr", cr)
 	_, err := c.service.nbCli.Networks.Update(ctx, networkid, nbapi.PutApiNetworksNetworkIdJSONRequestBody{
 		Name:        cr.Spec.ForProvider.Name,
 		Description: &cr.Spec.ForProvider.Description,
@@ -260,7 +259,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	if !ok {
 		return errors.New(errNotNbNetwork)
 	}
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	networkid := meta.GetExternalName(cr)
 	return c.service.nbCli.Networks.Delete(ctx, networkid)
 }

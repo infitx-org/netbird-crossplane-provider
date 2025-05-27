@@ -1,0 +1,23 @@
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbNameServer
+metadata:
+  name: nameservertest
+spec:
+  managementPolicies:
+    - "*"
+  providerConfigRef:
+    name: "netbird-crossplane-provider-config"
+  forProvider:
+    description: "test ns"
+    domains:
+      - "example.com"
+    enabled: true
+    name: nameservertest
+    nameservers:
+      - ip: "1.1.1.1"
+        ns_type: "udp"
+        port: 53
+    primary: false
+    search_domains_enabled: true
+    groups:
+      - d0qrhcn0fs0c73al1uug

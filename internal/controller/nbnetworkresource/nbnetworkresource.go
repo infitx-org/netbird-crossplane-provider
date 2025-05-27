@@ -18,7 +18,6 @@ package nbnetworkresource
 
 import (
 	"context"
-	"fmt"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
@@ -33,6 +32,7 @@ import (
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
+	"github.com/go-logr/logr"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
 	"github.com/pkg/errors"
@@ -160,6 +160,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -167,13 +168,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbNetworkResource)
 	}
+	c.log.Info("observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	networks, err := c.service.nbCli.Networks.List(ctx)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb listing networks")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
@@ -183,6 +185,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		if network.Name == cr.Spec.ForProvider.NetworkName {
 			apinetwork = &network
 		}
+	}
+	if apinetwork == nil {
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, errors.New("network name not found")
 	}
 	networkresource, err := c.service.nbCli.Networks.Resources(apinetwork.Id).Get(ctx, externalName)
 	if err != nil {
@@ -208,7 +215,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}, nil
 }
 
-func convertGroups(groupMinimums []nbapi.GroupMinimum) []v1alpha1.GroupMinimum {
+func convertGroups(groupMinimums []nbapi.GroupMinimum) *[]v1alpha1.GroupMinimum {
 	groups := make([]v1alpha1.GroupMinimum, len(groupMinimums))
 	for i, g := range groupMinimums {
 		groups[i] = v1alpha1.GroupMinimum{
@@ -219,7 +226,7 @@ func convertGroups(groupMinimums []nbapi.GroupMinimum) []v1alpha1.GroupMinimum {
 			ResourcesCount: g.ResourcesCount,
 		}
 	}
-	return groups
+	return &groups
 }
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
@@ -227,6 +234,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbNetworkResource)
 	}
+	c.log.Info("creating", "cr", cr)
 	networks, err := c.service.nbCli.Networks.List(ctx)
 	if err != nil {
 		return managed.ExternalCreation{}, err
@@ -237,12 +245,15 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 			apinetwork = &network
 		}
 	}
+	if apinetwork == nil {
+		return managed.ExternalCreation{}, errors.New("network name not found")
+	}
 	groups, err := c.service.nbCli.Groups.List(ctx)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
-	groupids := make([]string, len(cr.Spec.ForProvider.Groups))
-	for j, provgroup := range cr.Spec.ForProvider.Groups {
+	groupids := make([]string, len(*cr.Spec.ForProvider.Groups))
+	for j, provgroup := range *cr.Spec.ForProvider.Groups {
 		for _, apigroup := range groups {
 			if apigroup.Name == *provgroup.Name {
 				groupids[j] = apigroup.Id
@@ -259,10 +270,8 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	})
 
 	if err != nil {
-		fmt.Printf("err creating networkresource: %+v", err)
 		return managed.ExternalCreation{}, err
 	}
-	fmt.Printf("networkresource created: %+v", networkresource)
 	meta.SetExternalName(cr, networkresource.Id)
 	return managed.ExternalCreation{}, nil
 }
@@ -280,12 +289,45 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbNetworkResource)
 	}
-	//networkid := meta.GetExternalName(cr)
-	fmt.Printf("Updating: %+v", cr)
-	//todo
-	// if err != nil {
-	// 	return managed.ExternalUpdate{}, err
-	// }
+	networkResourceId := meta.GetExternalName(cr)
+	c.log.Info("Updating", "cr", cr)
+	networks, err := c.service.nbCli.Networks.List(ctx)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
+	var apinetwork *nbapi.Network
+	for _, network := range networks {
+		if network.Name == cr.Spec.ForProvider.NetworkName {
+			apinetwork = &network
+		}
+	}
+	if apinetwork == nil {
+		return managed.ExternalUpdate{}, errors.New("network name not found")
+	}
+	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
+	groupids := make([]string, len(*cr.Spec.ForProvider.Groups))
+	for j, provgroup := range *cr.Spec.ForProvider.Groups {
+		for _, apigroup := range groups {
+			if apigroup.Name == *provgroup.Name {
+				groupids[j] = apigroup.Id
+				break
+			}
+		}
+	}
+
+	_, err2 := c.service.nbCli.Networks.Resources(apinetwork.Id).Update(ctx, networkResourceId, nbapi.PutApiNetworksNetworkIdResourcesResourceIdJSONRequestBody{
+		Enabled:     cr.Spec.ForProvider.Enabled,
+		Address:     cr.Spec.ForProvider.Address,
+		Description: cr.Spec.ForProvider.Description,
+		Groups:      groupids,
+		Name:        cr.Spec.ForProvider.Name,
+	})
+	if err2 != nil {
+		return managed.ExternalUpdate{}, err
+	}
 
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
@@ -300,7 +342,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotNbNetworkResource)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	networks, err := c.service.nbCli.Networks.List(ctx)
 	if err != nil {
 		return err
@@ -310,6 +352,9 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		if network.Name == cr.Spec.ForProvider.NetworkName {
 			apinetwork = &network
 		}
+	}
+	if apinetwork == nil {
+		return errors.New("network not found")
 	}
 	networkresourceid := meta.GetExternalName(cr)
 	return c.service.nbCli.Networks.Resources(apinetwork.Id).Delete(ctx, networkresourceid)

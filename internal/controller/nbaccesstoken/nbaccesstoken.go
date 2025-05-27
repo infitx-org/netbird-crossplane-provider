@@ -18,9 +18,12 @@ package nbaccesstoken
 
 import (
 	"context"
-	"fmt"
+	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,7 +51,8 @@ const (
 	errGetPC            = "cannot get ProviderConfig"
 	errGetCreds         = "cannot get credentials"
 
-	errNewClient = "cannot create new Service"
+	errNewClient         = "cannot create new Service"
+	accessTokenSecretKey = "NB_API_KEY"
 )
 
 type NbService struct {
@@ -161,6 +165,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -170,26 +175,30 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	c.log.Info("Observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
-		fmt.Printf("didn't find externalname")
+		c.log.Info("didn't find externalname")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	var userid string
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
-			fmt.Printf("received error on call to nb for user: %+v", err)
 			return managed.ExternalObservation{
 				ResourceExists: false,
 			}, err
 		}
-		var apiuser nbapi.User
+		var apiuser *nbapi.User
 		for _, user := range users {
 			if *user.IsServiceUser && (user.Name == *cr.Spec.ForProvider.UserName) {
-				apiuser = user
+				apiuser = &user
 			}
+		}
+		if apiuser == nil {
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, errors.New("username doesn't exist")
 		}
 		userid = apiuser.Id
 	} else {
@@ -198,33 +207,66 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	accesstoken, err := c.service.nbCli.Tokens.Get(ctx, userid, externalName)
 	if err != nil {
-		fmt.Printf("received error on call to nb for accesstoken: %+v", accesstoken)
-		fmt.Printf("received error on call to nb for accesstoken: %+v", err)
+		c.log.Error(err, "received error on call to nb to get accesstoken", "accesstoken", accesstoken)
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
-	lastused := accesstoken.LastUsed.Local().String()
+	var lastused *string
+	if accesstoken.LastUsed != nil {
+		lastusedstring := accesstoken.LastUsed.Local().String()
+		lastused = &lastusedstring
+	}
+	if accesstoken.ExpirationDate.Before(time.Now()) {
+		cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{}
+		cr.Status.SetConditions(xpv1.Condition{Type: "Expired",
+			Status:             v1.ConditionTrue,
+			Reason:             "TimestampExpired",
+			Message:            "Resource has expired and needs recreation",
+			LastTransitionTime: metav1.Now(),
+		})
+		return managed.ExternalObservation{
+			ResourceExists:    true,
+			ResourceUpToDate:  false,
+			ConnectionDetails: managed.ConnectionDetails{},
+		}, nil
+	}
 	cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{
 		Id:             accesstoken.Id,
 		CreatedAt:      accesstoken.CreatedBy,
 		ExpirationDate: accesstoken.ExpirationDate.Local().String(),
 		CreatedBy:      accesstoken.CreatedBy,
-		LastUsed:       &lastused,
+		LastUsed:       lastused,
 		Name:           accesstoken.Name,
 	}
-
-	cr.Status.SetConditions(xpv1.Available())
+	cr.Status.SetConditions(xpv1.Available(), xpv1.Condition{Type: "Expired",
+		Status:             v1.ConditionFalse,
+		Reason:             "TimestampExpired",
+		Message:            "Resource has expired and needs recreation",
+		LastTransitionTime: metav1.Now(),
+	})
 	return managed.ExternalObservation{
 		ResourceExists:    true,
-		ResourceUpToDate:  true, //isUpToDate(&cr.Spec.ForProvider, accesstoken),
+		ResourceUpToDate:  true,
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-// func isUpToDate(nbAccessTokenParameters *v1alpha1.NbAccessTokenParameters, accesstoken *nbapi.PersonalAccessToken) bool {
-// 	return true //need to determine how to refresh token when expires
-// }
+func (c *external) getUserID(ctx context.Context, cr *v1alpha1.NbAccessToken) (string, error) {
+	if cr.Spec.ForProvider.UserName != nil {
+		users, err := c.service.nbCli.Users.List(ctx)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to list users")
+		}
+		for _, user := range users {
+			if user.Name == *cr.Spec.ForProvider.UserName {
+				return user.Id, nil
+			}
+		}
+		return "", errors.New("user not found")
+	}
+	return *cr.Spec.ForProvider.UserId, nil
+}
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr, ok := mg.(*v1alpha1.NbAccessToken)
@@ -232,12 +274,11 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotNbAccessToken)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 	var userid string
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
-			fmt.Printf("received error on call to nb: %+v", err)
 			return managed.ExternalCreation{}, err
 		}
 		var apiuser nbapi.User
@@ -255,14 +296,12 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		Name:      cr.Spec.ForProvider.Name,
 	})
 	if err != nil {
-		fmt.Printf("received error on call to nb : %+v", err)
 		return managed.ExternalCreation{}, err
 	}
-	fmt.Printf("accesstoken created: %+v", accesstoken)
 	meta.SetExternalName(cr, accesstoken.PersonalAccessToken.Id)
 
 	cd := managed.ConnectionDetails{
-		xpv1.ResourceCredentialsSecretPasswordKey: []byte(accesstoken.PlainToken),
+		accessTokenSecretKey: []byte(accesstoken.PlainToken),
 	}
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
@@ -271,17 +310,28 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
+// for now only called when token expired
 func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
 	cr, ok := mg.(*v1alpha1.NbAccessToken)
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbAccessToken)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
+	c.log.Info("Updating", "cr", cr)
+	externalName := meta.GetExternalName(cr)
+	if externalName == "" {
+		return managed.ExternalUpdate{}, errors.New("no externalname found")
+	}
+	userid, err := c.getUserID(ctx, cr)
+	if err != nil {
+		return managed.ExternalUpdate{}, err
+	}
 
+	if err := c.service.nbCli.Tokens.Delete(ctx, userid, externalName); err != nil {
+		return managed.ExternalUpdate{}, errors.Wrap(err, "failed to delete expired token")
+	}
+	meta.SetExternalName(cr, "")
 	return managed.ExternalUpdate{
-		// Optionally return any details that may be required to connect to the
-		// external resource. These will be stored as the connection secret.
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
@@ -295,12 +345,11 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	if externalName == "" {
 		return errors.New("no externalname found")
 	}
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	var userid string
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
-			fmt.Printf("received error on call to nb: %+v", err)
 			return err
 		}
 		var apiuser nbapi.User

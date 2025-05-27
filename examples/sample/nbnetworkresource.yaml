@@ -8,8 +8,25 @@ spec:
     enabled: true
     name: testnetworkresource
     groups:
-      - name: "xplanegrouptest"
+      - name: "cc-internal"
     address: "10.10.10.0/24"
+    network_name: ccinfra03
+
+  providerConfigRef:
+    name: "netbird-crossplane-provider-config"
+---
+apiVersion: vpn.netbird.crossplane.io/v1alpha1
+kind: NbNetworkResource
+metadata:
+  name: xplaneresourcetest2
+spec:
+  forProvider:
+    description: "test network resource2"
+    enabled: true
+    name: testnetworkresource2
+    groups:
+      - name: "cc-internal"
+    address: "10.10.11.0/24"
     network_name: xplanenetworktest
 
   providerConfigRef:

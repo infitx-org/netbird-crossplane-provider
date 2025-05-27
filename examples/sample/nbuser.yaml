@@ -13,6 +13,7 @@ spec:
   forProvider:
     email: david@infitx.com
     is_service_user: false
+    role: admin
 ---
 apiVersion: vpn.netbird.crossplane.io/v1alpha1
 kind: NbUser

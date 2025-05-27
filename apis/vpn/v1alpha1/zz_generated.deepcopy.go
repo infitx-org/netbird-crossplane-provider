@@ -48,34 +48,10 @@ func (in *AccountSettings) DeepCopyInto(out *AccountSettings) {
 		*out = new(AccountExtraSettings)
 		**out = **in
 	}
-	if in.GroupsPropagationEnabled != nil {
-		in, out := &in.GroupsPropagationEnabled, &out.GroupsPropagationEnabled
-		*out = new(bool)
-		**out = **in
-	}
 	if in.JwtAllowGroups != nil {
 		in, out := &in.JwtAllowGroups, &out.JwtAllowGroups
-		*out = new([]string)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]string, len(*in))
-			copy(*out, *in)
-		}
-	}
-	if in.JwtGroupsClaimName != nil {
-		in, out := &in.JwtGroupsClaimName, &out.JwtGroupsClaimName
-		*out = new(string)
-		**out = **in
-	}
-	if in.JwtGroupsEnabled != nil {
-		in, out := &in.JwtGroupsEnabled, &out.JwtGroupsEnabled
-		*out = new(bool)
-		**out = **in
-	}
-	if in.RoutingPeerDnsResolutionEnabled != nil {
-		in, out := &in.RoutingPeerDnsResolutionEnabled, &out.RoutingPeerDnsResolutionEnabled
-		*out = new(bool)
-		**out = **in
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 }
 
@@ -1038,9 +1014,13 @@ func (in *NbNetworkResourceObservation) DeepCopyInto(out *NbNetworkResourceObser
 	}
 	if in.Groups != nil {
 		in, out := &in.Groups, &out.Groups
-		*out = make([]GroupMinimum, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+		*out = new([]GroupMinimum)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]GroupMinimum, len(*in))
+			for i := range *in {
+				(*in)[i].DeepCopyInto(&(*out)[i])
+			}
 		}
 	}
 }
@@ -1065,9 +1045,13 @@ func (in *NbNetworkResourceParameters) DeepCopyInto(out *NbNetworkResourceParame
 	}
 	if in.Groups != nil {
 		in, out := &in.Groups, &out.Groups
-		*out = make([]GroupMinimum, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+		*out = new([]GroupMinimum)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]GroupMinimum, len(*in))
+			for i := range *in {
+				(*in)[i].DeepCopyInto(&(*out)[i])
+			}
 		}
 	}
 }
@@ -1526,8 +1510,12 @@ func (in *NbSetupKeyObservation) DeepCopyInto(out *NbSetupKeyObservation) {
 	*out = *in
 	if in.AutoGroups != nil {
 		in, out := &in.AutoGroups, &out.AutoGroups
-		*out = make([]string, len(*in))
-		copy(*out, *in)
+		*out = new([]string)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]string, len(*in))
+			copy(*out, *in)
+		}
 	}
 }
 

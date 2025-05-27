@@ -18,9 +18,9 @@ package nbdnssetting
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -162,6 +162,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -169,12 +170,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbDnsSetting)
 	}
-
-	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	c.log.Info("Observing", "cr", cr)
 	settings, err := c.service.nbCli.DNS.GetSettings(ctx)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb getting dns settings")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
@@ -186,19 +185,19 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:    true, //resource always exists
-		ResourceUpToDate:  reflect.DeepEqual(cr.Status.AtProvider.DisabledManagementGroups, settings.DisabledManagementGroups),
+		ResourceUpToDate:  reflect.DeepEqual(cr.Spec.ForProvider.DisabledManagementGroups, settings.DisabledManagementGroups),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-// this method should never be called since we don't create the account, only update settings
+// this method should never be called since we don't create the dns settings, only update
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr, ok := mg.(*v1alpha1.NbDnsSetting)
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbDnsSetting)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
@@ -213,7 +212,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbDnsSetting)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
+	c.log.Info("Updating", "cr", cr)
 	_, err := c.service.nbCli.DNS.UpdateSettings(ctx, api.PutApiDnsSettingsJSONRequestBody{
 		DisabledManagementGroups: cr.Spec.ForProvider.DisabledManagementGroups,
 	})
@@ -229,14 +228,14 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	}, nil
 }
 
-// this method should never be called since we don't create/delete the account, only update settings
+// this method should never be called since we don't create/delete the dns settings, only update settings
 func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	cr, ok := mg.(*v1alpha1.NbDnsSetting)
 	if !ok {
 		return errors.New(errNotNbDnsSetting)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 
 	return nil
 }

@@ -1,25 +1,22 @@
 apiVersion: vpn.netbird.crossplane.io/v1alpha1
 kind: NbPolicy
 metadata:
-  name: xplanepolicytest
+  name: xplanepolicytest2
 spec:
   providerConfigRef:
     name: "netbird-crossplane-provider-config"
   forProvider:
-    description: test policy
+    description: test policy2
     enabled: true
-    name: xplanepolicytest
+    name: xplanepolicytest2
     rules:
-      - name: xplanepolicytestrule
+      - name: xplanepolicytestrule2
         action: accept
         bidirectional: true
         description: test rule
         destinations:
-          - name: xplanegrouptest
+          - name: All
         enabled: true
-        port_ranges:
-          - start: 180
-            end: 300
-        protocol: tcp
         sources:
-          - name: xplanegrouptest2
+          - name: All
+        protocol: tcp

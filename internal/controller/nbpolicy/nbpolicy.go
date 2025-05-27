@@ -18,7 +18,7 @@ package nbpolicy
 
 import (
 	"context"
-	"fmt"
+	"reflect"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection"
@@ -33,6 +33,7 @@ import (
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
@@ -160,6 +161,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -169,7 +171,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	c.log.Info("Observing", "cr", cr)
 
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
@@ -177,12 +179,12 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	policy, err := c.service.nbCli.Policies.Get(ctx, externalName)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb getting policy")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
-	uptodate := IsApiToNBPolicyUpToDate(cr.Status.AtProvider, policy)
+	uptodate := IsApiToNBPolicyUpToDate(cr.Spec.ForProvider, policy, c)
 	cr.Status.AtProvider = v1alpha1.NbPolicyObservation{
 		Id:                  policy.Id,
 		Enabled:             policy.Enabled,
@@ -206,8 +208,12 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotNbPolicy)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
+	rules, err := NbToApiRules(&cr.Spec.ForProvider.Rules, groups)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
@@ -216,10 +222,9 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		Description:         cr.Spec.ForProvider.Description,
 		Enabled:             cr.Spec.ForProvider.Enabled,
 		SourcePostureChecks: cr.Spec.ForProvider.SourcePostureChecks,
-		Rules:               NbToApiRules(&cr.Spec.ForProvider.Rules, groups),
+		Rules:               rules,
 	})
 	if err != nil {
-		fmt.Printf("err creating policy: %+v", err)
 		return managed.ExternalCreation{
 			// Optionally return any details that may be required to connect to the
 			// external resource. These will be stored as the connection secret.
@@ -237,9 +242,31 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbPolicy)
 	}
-
-	fmt.Printf("Updating: %+v", cr)
-
+	c.log.Info("Updating", "cr", cr)
+	policyid := meta.GetExternalName(cr)
+	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalUpdate{
+			// Optionally return any details that may be required to connect to the
+			// external resource. These will be stored as the connection secret.
+			ConnectionDetails: managed.ConnectionDetails{},
+		}, err
+	}
+	rules, err := NbToApiRules(&cr.Spec.ForProvider.Rules, groups)
+	if err != nil {
+		return managed.ExternalUpdate{
+			// Optionally return any details that may be required to connect to the
+			// external resource. These will be stored as the connection secret.
+			ConnectionDetails: managed.ConnectionDetails{},
+		}, err
+	}
+	c.service.nbCli.Policies.Update(ctx, policyid, nbapi.PutApiPoliciesPolicyIdJSONRequestBody{
+		Name:                cr.Spec.ForProvider.Name,
+		Description:         cr.Spec.ForProvider.Description,
+		Enabled:             cr.Spec.ForProvider.Enabled,
+		SourcePostureChecks: cr.Spec.ForProvider.SourcePostureChecks,
+		Rules:               rules,
+	})
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -253,33 +280,43 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotNbPolicy)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	policyid := meta.GetExternalName(cr)
 	return c.service.nbCli.Policies.Delete(ctx, policyid)
 }
 
-func NbToApiRules(policyRule *[]v1alpha1.PolicyRule, groups []nbapi.Group) []nbapi.PolicyRuleUpdate {
-	fmt.Printf("Creating rules")
+func NbToApiRules(policyRule *[]v1alpha1.PolicyRule, groups []nbapi.Group) ([]nbapi.PolicyRuleUpdate, error) {
 	rules := make([]nbapi.PolicyRuleUpdate, len(*policyRule))
 	for i, prule := range *policyRule {
+		destinations, desterr := NbToApiGroupMinimums(prule.Destinations, groups)
+		if desterr != nil {
+			return nil, desterr
+		}
+		sources, sourceerr := NbToApiGroupMinimums(prule.Sources, groups)
+		if sourceerr != nil {
+			return nil, sourceerr
+		}
 		rules[i] = nbapi.PolicyRuleUpdate{
 			Action:        nbapi.PolicyRuleUpdateAction(prule.Action),
 			Bidirectional: prule.Bidirectional,
 			Description:   prule.Description,
-			Destinations:  NbToApiGroupMinimums(prule.Destinations, groups),
+			Destinations:  destinations,
 			Enabled:       prule.Enabled,
 			Id:            prule.Id,
 			Name:          prule.Name,
 			PortRanges:    NbToApiPortRanges(prule.PortRanges),
 			Ports:         prule.Ports,
 			Protocol:      nbapi.PolicyRuleUpdateProtocol(prule.Protocol),
-			Sources:       NbToApiGroupMinimums(prule.Sources, groups),
+			Sources:       sources,
 		}
 	}
-	return rules
+	return rules, nil
 }
 
 func NbToApiPortRanges(rulePortRange *[]v1alpha1.RulePortRange) *[]nbapi.RulePortRange {
+	if rulePortRange == nil {
+		return nil
+	}
 	rportrange := make([]nbapi.RulePortRange, len(*rulePortRange))
 	for i, rulePort := range *rulePortRange {
 		rportrange[i] = nbapi.RulePortRange{
@@ -290,21 +327,56 @@ func NbToApiPortRanges(rulePortRange *[]v1alpha1.RulePortRange) *[]nbapi.RulePor
 	return &rportrange
 }
 
-func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi.Group) *[]string {
+func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi.Group) (*[]string, error) {
 	ids := make([]string, len(*groupMinimums))
+	err := errors.New("couldnt resolve group")
 	for i, gmin := range *groupMinimums {
 		for _, group := range groups {
-			if group.Name == *gmin.Name {
+			if gmin.Id != nil && group.Id == *gmin.Id {
 				ids[i] = group.Id
+				err = nil
 				break
+			} else {
+				if gmin.Name != nil && group.Name == *gmin.Name {
+					ids[i] = group.Id
+					err = nil
+					break
+				}
 			}
 		}
 	}
-	return &ids
+	return &ids, err
 }
 
-func IsApiToNBPolicyUpToDate(nbPolicyObservation v1alpha1.NbPolicyObservation, policy *nbapi.Policy) bool {
-	return cmp.Equal(nbPolicyObservation.Enabled, policy.Enabled)
+func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi.Policy, c *external) bool {
+	if nbPolicy.Rules == nil || policy.Rules == nil {
+		c.log.Info("one of the rules is nil")
+		return false
+	}
+	policyrules := ApiToNBRules(policy.Rules)
+	for i, policyrule := range *policyrules {
+		if !cmp.Equal(policyrule.Description, policy.Rules[i].Description) {
+			c.log.Info("Description doesn't match")
+			return false
+		}
+		if !cmp.Equal(policyrule.Action, string(policy.Rules[i].Action)) {
+			c.log.Info("action doesn't match")
+			return false
+		}
+		if !cmp.Equal(policyrule.Bidirectional, policy.Rules[i].Bidirectional) {
+			c.log.Info("bidirectional doesn't match")
+			return false
+		}
+		if !reflect.DeepEqual(*policyrule.Destinations, *ApiToNBGroupMinimums(policy.Rules[i].Destinations)) {
+			c.log.Info("destinations don't match")
+			return false
+		}
+		if !reflect.DeepEqual(*policyrule.Sources, *ApiToNBGroupMinimums(policy.Rules[i].Sources)) {
+			c.log.Info("sources don't match")
+			return false
+		}
+	}
+	return true
 }
 func ApiToNBRules(p []nbapi.PolicyRule) *[]v1alpha1.PolicyRule {
 	rules := make([]v1alpha1.PolicyRule, len(p))
@@ -327,6 +399,9 @@ func ApiToNBRules(p []nbapi.PolicyRule) *[]v1alpha1.PolicyRule {
 }
 
 func ApiToNBPortRanges(rulePortRange *[]nbapi.RulePortRange) *[]v1alpha1.RulePortRange {
+	if rulePortRange == nil {
+		return nil
+	}
 	rportrange := make([]v1alpha1.RulePortRange, len(*rulePortRange))
 	for i, rulePort := range *rulePortRange {
 		rportrange[i] = v1alpha1.RulePortRange{
@@ -338,6 +413,9 @@ func ApiToNBPortRanges(rulePortRange *[]nbapi.RulePortRange) *[]v1alpha1.RulePor
 }
 
 func ApiToNBGroupMinimums(groupMinimum *[]nbapi.GroupMinimum) *[]v1alpha1.GroupMinimum {
+	if groupMinimum == nil {
+		return nil
+	}
 	groupminimums := make([]v1alpha1.GroupMinimum, len(*groupMinimum))
 	for i, gmin := range *groupMinimum {
 		groupminimums[i] = v1alpha1.GroupMinimum{
