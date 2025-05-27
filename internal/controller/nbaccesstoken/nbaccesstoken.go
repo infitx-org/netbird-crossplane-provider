@@ -18,9 +18,9 @@ package nbaccesstoken
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -165,6 +165,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -174,17 +175,16 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	c.log.Info("Observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
-		fmt.Printf("didn't find externalname")
+		c.log.Info("didn't find externalname")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	var userid string
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
-			fmt.Printf("received error on call to nb for user: %+v", err)
 			return managed.ExternalObservation{
 				ResourceExists: false,
 			}, err
@@ -207,8 +207,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	accesstoken, err := c.service.nbCli.Tokens.Get(ctx, userid, externalName)
 	if err != nil {
-		fmt.Printf("received error on call to nb for accesstoken: %+v", accesstoken)
-		fmt.Printf("received error on call to nb for accesstoken: %+v", err)
+		c.log.Error(err, "received error on call to nb to get accesstoken", "accesstoken", accesstoken)
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
@@ -275,12 +274,11 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotNbAccessToken)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 	var userid string
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
-			fmt.Printf("received error on call to nb: %+v", err)
 			return managed.ExternalCreation{}, err
 		}
 		var apiuser nbapi.User
@@ -298,10 +296,8 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		Name:      cr.Spec.ForProvider.Name,
 	})
 	if err != nil {
-		fmt.Printf("received error on call to nb : %+v", err)
 		return managed.ExternalCreation{}, err
 	}
-	fmt.Printf("accesstoken created: %+v", accesstoken)
 	meta.SetExternalName(cr, accesstoken.PersonalAccessToken.Id)
 
 	cd := managed.ConnectionDetails{
@@ -321,7 +317,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbAccessToken)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
+	c.log.Info("Updating", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
 		return managed.ExternalUpdate{}, errors.New("no externalname found")
@@ -331,7 +327,6 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, err
 	}
 
-	// 2. Delete the expired token
 	if err := c.service.nbCli.Tokens.Delete(ctx, userid, externalName); err != nil {
 		return managed.ExternalUpdate{}, errors.Wrap(err, "failed to delete expired token")
 	}
@@ -350,12 +345,11 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	if externalName == "" {
 		return errors.New("no externalname found")
 	}
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	var userid string
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := c.service.nbCli.Users.List(ctx)
 		if err != nil {
-			fmt.Printf("received error on call to nb: %+v", err)
 			return err
 		}
 		var apiuser nbapi.User

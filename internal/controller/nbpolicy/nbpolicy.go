@@ -18,7 +18,6 @@ package nbpolicy
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -34,6 +33,7 @@ import (
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
@@ -161,6 +161,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -170,7 +171,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	c.log.Info("Observing", "cr", cr)
 
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
@@ -178,12 +179,12 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	policy, err := c.service.nbCli.Policies.Get(ctx, externalName)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb getting policy")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
-	uptodate := IsApiToNBPolicyUpToDate(cr.Spec.ForProvider, policy)
+	uptodate := IsApiToNBPolicyUpToDate(cr.Spec.ForProvider, policy, c)
 	cr.Status.AtProvider = v1alpha1.NbPolicyObservation{
 		Id:                  policy.Id,
 		Enabled:             policy.Enabled,
@@ -207,7 +208,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotNbPolicy)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 	groups, err := c.service.nbCli.Groups.List(ctx)
 	if err != nil {
 		return managed.ExternalCreation{}, err
@@ -224,7 +225,6 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		Rules:               rules,
 	})
 	if err != nil {
-		fmt.Printf("err creating policy: %+v", err)
 		return managed.ExternalCreation{
 			// Optionally return any details that may be required to connect to the
 			// external resource. These will be stored as the connection secret.
@@ -242,9 +242,31 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbPolicy)
 	}
-
-	fmt.Printf("Updating: %+v", cr)
-
+	c.log.Info("Updating", "cr", cr)
+	policyid := meta.GetExternalName(cr)
+	groups, err := c.service.nbCli.Groups.List(ctx)
+	if err != nil {
+		return managed.ExternalUpdate{
+			// Optionally return any details that may be required to connect to the
+			// external resource. These will be stored as the connection secret.
+			ConnectionDetails: managed.ConnectionDetails{},
+		}, err
+	}
+	rules, err := NbToApiRules(&cr.Spec.ForProvider.Rules, groups)
+	if err != nil {
+		return managed.ExternalUpdate{
+			// Optionally return any details that may be required to connect to the
+			// external resource. These will be stored as the connection secret.
+			ConnectionDetails: managed.ConnectionDetails{},
+		}, err
+	}
+	c.service.nbCli.Policies.Update(ctx, policyid, nbapi.PutApiPoliciesPolicyIdJSONRequestBody{
+		Name:                cr.Spec.ForProvider.Name,
+		Description:         cr.Spec.ForProvider.Description,
+		Enabled:             cr.Spec.ForProvider.Enabled,
+		SourcePostureChecks: cr.Spec.ForProvider.SourcePostureChecks,
+		Rules:               rules,
+	})
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -258,13 +280,12 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotNbPolicy)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	policyid := meta.GetExternalName(cr)
 	return c.service.nbCli.Policies.Delete(ctx, policyid)
 }
 
 func NbToApiRules(policyRule *[]v1alpha1.PolicyRule, groups []nbapi.Group) ([]nbapi.PolicyRuleUpdate, error) {
-	fmt.Printf("Creating rules")
 	rules := make([]nbapi.PolicyRuleUpdate, len(*policyRule))
 	for i, prule := range *policyRule {
 		destinations, desterr := NbToApiGroupMinimums(prule.Destinations, groups)
@@ -327,33 +348,31 @@ func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi
 	return &ids, err
 }
 
-func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi.Policy) bool {
-	fmt.Printf("IsApiToNBPolicyUpToDate with nbPolicy: %+v", nbPolicy)
-	fmt.Printf("IsApiToNBPolicyUpToDate with policy: %+v", policy)
+func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi.Policy, c *external) bool {
 	if nbPolicy.Rules == nil || policy.Rules == nil {
-		fmt.Printf("rule nil")
+		c.log.Info("one of the rules is nil")
 		return false
 	}
 	policyrules := ApiToNBRules(policy.Rules)
 	for i, policyrule := range *policyrules {
 		if !cmp.Equal(policyrule.Description, policy.Rules[i].Description) {
-			fmt.Printf("Description doesn't match")
+			c.log.Info("Description doesn't match")
 			return false
 		}
 		if !cmp.Equal(policyrule.Action, string(policy.Rules[i].Action)) {
-			fmt.Printf("action doesn't match")
+			c.log.Info("action doesn't match")
 			return false
 		}
 		if !cmp.Equal(policyrule.Bidirectional, policy.Rules[i].Bidirectional) {
-			fmt.Printf("bidirectional doesn't match")
+			c.log.Info("bidirectional doesn't match")
 			return false
 		}
 		if !reflect.DeepEqual(*policyrule.Destinations, *ApiToNBGroupMinimums(policy.Rules[i].Destinations)) {
-			fmt.Printf("destinations don't match")
+			c.log.Info("destinations don't match")
 			return false
 		}
 		if !reflect.DeepEqual(*policyrule.Sources, *ApiToNBGroupMinimums(policy.Rules[i].Sources)) {
-			fmt.Printf("sources don't match")
+			c.log.Info("sources don't match")
 			return false
 		}
 	}

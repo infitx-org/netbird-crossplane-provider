@@ -18,8 +18,8 @@ package nbuser
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -163,6 +163,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -170,9 +171,10 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbUser)
 	}
+	c.log.Info("observing", "cr", cr)
 	users, err := c.service.nbCli.Users.List(ctx)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb listing users")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, err
@@ -236,7 +238,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotNbUser)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 	if *cr.Spec.ForProvider.IsServiceUser {
 		serviceUser, err := c.service.nbCli.Users.Create(ctx, nbapi.PostApiUsersJSONRequestBody{
 			IsServiceUser: *cr.Spec.ForProvider.IsServiceUser,
@@ -245,7 +247,6 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 			AutoGroups:    *cr.Spec.ForProvider.AutoGroups,
 		})
 		if err != nil {
-			fmt.Printf("received error on call to nb: %+v", err)
 			return managed.ExternalCreation{}, err
 		}
 		meta.SetExternalName(cr, serviceUser.Id)
@@ -263,7 +264,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbUser)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
+	c.log.Info("Updating", "cr", cr)
 	_, err := c.service.nbCli.Users.Update(ctx, meta.GetExternalName(cr), nbapi.PutApiUsersUserIdJSONRequestBody{
 		Role:       cr.Spec.ForProvider.Role,
 		AutoGroups: *cr.Status.AtProvider.AutoGroups,
@@ -285,12 +286,9 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotNbUser)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	if *cr.Spec.ForProvider.IsServiceUser {
-		err := c.service.nbCli.Users.Delete(ctx, meta.GetExternalName(cr))
-		if err != nil {
-			return err
-		}
+		return c.service.nbCli.Users.Delete(ctx, meta.GetExternalName(cr))
 	}
 	return nil
 }

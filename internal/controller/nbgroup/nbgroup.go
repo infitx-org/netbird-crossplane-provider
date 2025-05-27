@@ -18,8 +18,8 @@ package nbgroup
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -161,6 +161,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -169,13 +170,13 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbGroup)
 	}
-	fmt.Printf("observing: %+v", cr)
+	c.log.Info("Observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
-		fmt.Printf("external name blank")
+		c.log.Info("external name blank")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
-	fmt.Printf("external name: %+v", externalName)
+	c.log.Info("external name: %+v", externalName)
 	var group nbapi.Group
 
 	//this only happens on first observe of resource that needs to be created
@@ -187,14 +188,15 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		if meta.WasDeleted(mg) {
 			return managed.ExternalObservation{ResourceExists: false}, nil
 		}
-		fmt.Printf("looking for existing group: %+v", cr.Spec.ForProvider.Name)
+		c.log.Info("looking for existing group: %+v", cr.Spec.ForProvider.Name)
 		groups, err := c.service.nbCli.Groups.List(ctx)
 		if err != nil {
-			return managed.ExternalObservation{ResourceExists: false}, nil
+			c.log.Error(err, "received error on call to nb listing groups")
+			return managed.ExternalObservation{ResourceExists: false}, err
 		}
 		for _, apigroup := range groups {
 			if apigroup.Name == externalName {
-				fmt.Printf("found existing groupid: %+v", apigroup.Id)
+				c.log.Info("found existing groupid: %+v", apigroup.Id)
 				group = apigroup
 				break
 			}
@@ -204,7 +206,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	{
 		apigroup, err := c.service.nbCli.Groups.Get(ctx, externalName)
 		if err != nil {
-			fmt.Printf("received error on call to nb: %+v", err)
+			c.log.Info("received error on call to nb: %+v", err)
 			return managed.ExternalObservation{
 				ResourceExists: false,
 			}, nil //return nil so that observe can return without error so that it passes to create.
@@ -212,7 +214,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		group = *apigroup
 	}
 	cr.Status.SetConditions(xpv1.Available())
-	fmt.Printf("setting atprovider")
+	c.log.Info("setting atprovider")
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{
 		Id:             group.Id,
 		Issued:         group.Issued,
@@ -221,7 +223,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		Resources:      group.Resources,
 		ResourcesCount: group.ResourcesCount,
 	}
-	fmt.Printf("set atprovider id: %+v", cr.Status.AtProvider.Id)
+	c.log.Info("set atprovider id: %+v", cr.Status.AtProvider.Id)
 	return managed.ExternalObservation{
 		ResourceExists:   true,
 		ResourceUpToDate: true, //since we don't update groups
@@ -234,20 +236,19 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotNbGroup)
 	}
 
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 	group, err := c.service.nbCli.Groups.Create(ctx, nbapi.GroupRequest{
 		Name: cr.Spec.ForProvider.Name,
 	})
 
 	if err != nil {
-		fmt.Printf("err creating group: %+v", err)
 		return managed.ExternalCreation{
 			// Optionally return any details that may be required to connect to the
 			// external resource. These will be stored as the connection secret.
 			ConnectionDetails: managed.ConnectionDetails{},
 		}, err
 	}
-	fmt.Printf("group created: %+v", group)
+	c.log.Info("group created", "group", group)
 	meta.SetExternalName(cr, group.Id)
 	return managed.ExternalCreation{}, nil
 }
@@ -259,7 +260,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbGroup)
 	}
 
-	fmt.Printf("Updating: %+v", cr) //no fields update on group
+	c.log.Info("Updating", "cr", cr) //no fields update on group
 	return managed.ExternalUpdate{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -273,6 +274,6 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotNbGroup)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 	return c.service.nbCli.Groups.Delete(ctx, meta.GetExternalName(cr))
 }

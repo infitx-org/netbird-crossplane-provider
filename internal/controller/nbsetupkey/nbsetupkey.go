@@ -154,7 +154,10 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	if err != nil {
 		return nil, errors.Wrap(err, errNewClient)
 	}
-	return &external{service: svc}, nil
+	return &external{
+		service: svc,
+		log:     ctrl.LoggerFrom(ctx).WithName("nbsetupkey.controller"),
+	}, nil
 }
 
 // An ExternalClient observes, then either creates, updates, or deletes an
@@ -163,6 +166,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -170,15 +174,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbSetupKey)
 	}
+	c.log.Info("Observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("Observing Setupkey", "cr", cr)
 	setupkey, err := c.service.nbCli.SetupKeys.Get(ctx, externalName)
 	if err != nil {
-		log.Error(err, "received error on call to nb")
+		c.log.Error(err, "setupkey not found")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
@@ -201,7 +204,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:    true,
-		ResourceUpToDate:  isUpToDate(&cr.Spec.ForProvider, setupkey, log),
+		ResourceUpToDate:  isUpToDate(&cr.Spec.ForProvider, setupkey, c.log),
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
@@ -224,9 +227,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbSetupKey)
 	}
-
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("Creating Setupkey", "cr", cr)
+	c.log.Info("Creating", "cr", cr)
 	setupkey, err := c.service.nbCli.SetupKeys.Create(ctx, api.PostApiSetupKeysJSONRequestBody{
 		Name:                cr.Spec.ForProvider.Name,
 		AllowExtraDnsLabels: &cr.Spec.ForProvider.AllowExtraDnsLabels,
@@ -238,14 +239,12 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	})
 
 	if err != nil {
-		log.Error(err, "err creating setupkey")
 		return managed.ExternalCreation{
 			// Optionally return any details that may be required to connect to the
 			// external resource. These will be stored as the connection secret.
 			ConnectionDetails: managed.ConnectionDetails{},
 		}, err
 	}
-	log.Info("created Setupkey", "setupkey", setupkey)
 	meta.SetExternalName(cr, setupkey.Id)
 	cd := managed.ConnectionDetails{xpv1.ResourceCredentialsSecretPasswordKey: []byte(setupkey.Key)}
 	return managed.ExternalCreation{
@@ -260,9 +259,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbSetupKey)
 	}
-
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("Updating Setupkey", "cr", cr)
+	c.log.Info("Updating", "cr", cr)
 	setupKeyId := meta.GetExternalName(cr)
 	if setupKeyId == "" {
 		return managed.ExternalUpdate{}, errors.New("can't find setupKeyId")
@@ -287,9 +284,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	if !ok {
 		return errors.New(errNotNbSetupKey)
 	}
-
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("Deleting Setupkey", "cr", cr)
+	c.log.Info("Deleting", "cr", cr)
 
 	return c.service.nbCli.SetupKeys.Delete(ctx, meta.GetExternalName(cr))
 }

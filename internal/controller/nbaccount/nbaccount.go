@@ -18,9 +18,9 @@ package nbaccount
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -164,6 +164,7 @@ type external struct {
 	// A 'client' used to connect to the external resource API. In practice this
 	// would be something like an AWS SDK client.
 	service *NbService
+	log     logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -173,31 +174,31 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 
 	// These fmt statements should be removed in the real implementation.
-	fmt.Printf("Observing: %+v", cr)
+	c.log.Info("Observing", "cr", cr)
 	//list accounts always returns the only account
 	accounts, err := c.service.nbCli.Accounts.List(ctx)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb listing accounts")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
 	accountusers, err := c.service.nbCli.Users.List(ctx)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb listing users")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
 	allgroups, err := c.service.nbCli.Groups.List(ctx)
 	if err != nil {
-		fmt.Printf("received error on call to nb: %+v", err)
+		c.log.Error(err, "received error on call to nb listing groups")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil
 	}
 	account := accounts[0]
-	uptodate := isUpToDate(*cr, account)
+	uptodate := isUpToDate(*cr, account, c)
 	cr.Status.AtProvider = v1alpha1.NbAccountObservation{
 		Id:       account.Id,
 		Settings: *ApitoNbAccountSettings(account.Settings),
@@ -213,59 +214,57 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}, nil
 }
 
-func isUpToDate(nbaccount v1alpha1.NbAccount, apiaccount api.Account) bool {
-	fmt.Printf("isuptodate, nbaccount %+v", nbaccount.Spec.ForProvider.Settings)
-	fmt.Printf("isuptodate, apiaccount %+v", apiaccount.Settings)
+func isUpToDate(nbaccount v1alpha1.NbAccount, apiaccount api.Account, c *external) bool {
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.Extra.NetworkTrafficLogsEnabled, apiaccount.Settings.Extra.NetworkTrafficLogsEnabled) {
-		fmt.Printf("extra settings NetworkTrafficLogsEnabled not equal")
+		c.log.Info("extra settings NetworkTrafficLogsEnabled not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.Extra.NetworkTrafficPacketCounterEnabled, apiaccount.Settings.Extra.NetworkTrafficPacketCounterEnabled) {
-		fmt.Printf("extra settings NetworkTrafficPacketCounterEnabled not equal")
+		c.log.Info("extra settings NetworkTrafficPacketCounterEnabled not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.Extra.PeerApprovalEnabled, apiaccount.Settings.Extra.PeerApprovalEnabled) {
-		fmt.Printf("extra settings PeerApprovalEnabled not equal")
+		c.log.Info("extra settings PeerApprovalEnabled not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.GroupsPropagationEnabled, *apiaccount.Settings.GroupsPropagationEnabled) {
-		fmt.Printf("GroupsPropagationEnabled not equal")
+		c.log.Info("GroupsPropagationEnabled not equal")
 		return false
 	}
 	if !reflect.DeepEqual(nbaccount.Spec.ForProvider.Settings.JwtAllowGroups, *apiaccount.Settings.JwtAllowGroups) {
-		fmt.Printf("JwtAllowGroups not equal")
+		c.log.Info("JwtAllowGroups not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.JwtGroupsClaimName, *apiaccount.Settings.JwtGroupsClaimName) {
-		fmt.Printf("JwtGroupsClaimName not equal")
+		c.log.Info("JwtGroupsClaimName not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.JwtGroupsEnabled, *apiaccount.Settings.JwtGroupsEnabled) {
-		fmt.Printf("JwtGroupsEnabled not equal")
+		c.log.Info("JwtGroupsEnabled not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerInactivityExpiration, apiaccount.Settings.PeerInactivityExpiration) {
-		fmt.Printf("PeerInactivityExpiration not equal")
+		c.log.Info("PeerInactivityExpiration not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerInactivityExpirationEnabled, apiaccount.Settings.PeerInactivityExpirationEnabled) {
-		fmt.Printf("PeerInactivityExpirationEnabled not equal")
+		c.log.Info("PeerInactivityExpirationEnabled not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerLoginExpiration, apiaccount.Settings.PeerLoginExpiration) {
-		fmt.Printf("PeerLoginExpiration not equal")
+		c.log.Info("PeerLoginExpiration not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.PeerLoginExpirationEnabled, apiaccount.Settings.PeerLoginExpirationEnabled) {
-		fmt.Printf("PeerLoginExpirationEnabled not equal")
+		c.log.Info("PeerLoginExpirationEnabled not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.RegularUsersViewBlocked, apiaccount.Settings.RegularUsersViewBlocked) {
-		fmt.Printf("RegularUsersViewBlocked not equal")
+		c.log.Info("RegularUsersViewBlocked not equal")
 		return false
 	}
 	if !cmp.Equal(nbaccount.Spec.ForProvider.Settings.RoutingPeerDnsResolutionEnabled, *apiaccount.Settings.RoutingPeerDnsResolutionEnabled) {
-		fmt.Printf("RoutingPeerDnsResolutionEnabled not equal")
+		c.log.Info("RoutingPeerDnsResolutionEnabled not equal")
 		return false
 	}
 	return true
@@ -277,7 +276,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbAccount)
 	}
-	fmt.Printf("Creating: %+v", cr)
+	c.log.Info("Creating", "cr", cr)
 	return managed.ExternalCreation{
 		// Optionally return any details that may be required to connect to the
 		// external resource. These will be stored as the connection secret.
@@ -291,13 +290,13 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotNbAccount)
 	}
 
-	fmt.Printf("Updating: %+v", cr)
+	c.log.Info("Updating", "cr", cr)
 	accountId := meta.GetExternalName(cr)
 	if accountId == "" {
 		return managed.ExternalUpdate{}, errors.New("can't find accountid")
 	}
 	accountsettings := NbToApiAccountSettings(cr.Spec.ForProvider.Settings)
-	fmt.Printf("Updating with accountsettings: %+v", accountsettings)
+	c.log.Info("Updating", "accountsettings", accountsettings)
 	_, err := c.service.nbCli.Accounts.Update(ctx, accountId, api.AccountRequest{
 		Settings: *accountsettings,
 	})
@@ -320,7 +319,7 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New(errNotNbAccount)
 	}
 
-	fmt.Printf("Deleting: %+v", cr)
+	c.log.Info("Deleting", "cr", cr)
 
 	return nil
 }

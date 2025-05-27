@@ -8,7 +8,7 @@ spec:
   forProvider:
     expires_in: 1
     name: test-token
-    user_id: decba6d4-cc76-4e1b-ace9-9c021c2e31f3
+    user_id: b268c87b-b23c-4b80-ad56-762f04cd19e5
   writeConnectionSecretToRef:
     name: accesstokensecrettest
     namespace: crossplane-system
