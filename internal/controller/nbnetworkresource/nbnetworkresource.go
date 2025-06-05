@@ -30,15 +30,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	apisv1alpha1 "github.com/crossplane/netbird-crossplane-provider/apis/v1alpha1"
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
-	nbcontrol "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
+	auth "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
 	"github.com/go-logr/logr"
-	netbird "github.com/netbirdio/netbird/management/client/rest"
 	nbapi "github.com/netbirdio/netbird/management/server/http/api"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -46,24 +43,6 @@ const (
 	errTrackPCUsage         = "cannot track ProviderConfig usage"
 	errGetPC                = "cannot get ProviderConfig"
 	errGetCreds             = "cannot get credentials"
-
-	errNewClient = "cannot create new Service"
-)
-
-type NbService struct {
-	nbCli *netbird.Client
-}
-
-var (
-	newNbService = func(url string, creds string, credType string) (*NbService, error) {
-		var c *netbird.Client
-		if credType == "oauth" {
-			c = netbird.NewWithBearerToken(url, creds)
-		} else {
-			c = netbird.New(url, creds)
-		}
-		return &NbService{nbCli: c}, nil
-	}
 )
 
 // Setup adds a controller that reconciles NbNetworkResource managed resources.
@@ -77,9 +56,11 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 
 	reconcilerOptions := []managed.ReconcilerOption{
 		managed.WithExternalConnecter(&connector{
-			kube:         mgr.GetClient(),
-			usage:        resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
-			newServiceFn: newNbService}),
+			SharedConnector: auth.NewSharedConnector(
+				mgr.GetClient(),
+				resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
+			),
+		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
@@ -102,12 +83,8 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
-// A connector is expected to produce an ExternalClient when its Connect method
-// is called.
 type connector struct {
-	kube         client.Client
-	usage        resource.Tracker
-	newServiceFn func(url string, creds string, credsType string) (*NbService, error)
+	*auth.SharedConnector
 }
 
 // Connect typically produces an ExternalClient by:
@@ -116,51 +93,30 @@ type connector struct {
 // 3. Getting the credentials specified by the ProviderConfig.
 // 4. Using the credentials to form a client.
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.NbNetworkResource)
+	_, ok := mg.(*v1alpha1.NbNetworkResource)
 	if !ok {
 		return nil, errors.New(errNotNbNetworkResource)
 	}
 
-	if err := c.usage.Track(ctx, mg); err != nil {
-		return nil, errors.Wrap(err, errTrackPCUsage)
-	}
-
-	pc := &apisv1alpha1.ProviderConfig{}
-	if err := c.kube.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
-		return nil, errors.Wrap(err, errGetPC)
-	}
-
-	cd := pc.Spec.Credentials
-	data, err := resource.CommonCredentialExtractor(ctx, cd.Source, c.kube, cd.CommonCredentialSelectors)
+	pc, err := c.SharedConnector.GetProviderConfig(ctx, mg)
 	if err != nil {
-		return nil, errors.Wrap(err, errGetCreds)
-	}
-	nbManagementEndpoint := pc.Spec.MmanagementURI
-	var creds string
-	var err2 error
-	if pc.Spec.CredentialsType == "oauth" {
-		creds, err2 = nbcontrol.GetTokenUsingOauth(string(data), pc.Spec.OauthIssuerUrl)
-		if err2 != nil {
-			return nil, errors.Wrap(err2, errNewClient)
-		}
-	} else {
-		creds = string(data)
-	}
-	svc, err := c.newServiceFn(nbManagementEndpoint, creds, pc.Spec.CredentialsType)
-	if err != nil {
-		return nil, errors.Wrap(err, errNewClient)
+		return nil, err
 	}
 
-	return &external{service: svc}, nil
+	authManager, err := c.SharedConnector.Connect(ctx, mg, pc)
+	if err != nil {
+		return nil, err
+	}
+
+	return &external{
+		authManager: authManager,
+		log:         ctrl.Log.WithName("provider-nbnetworkresource"),
+	}, nil
 }
 
-// An ExternalClient observes, then either creates, updates, or deletes an
-// external resource to ensure it reflects the managed resource's desired state.
 type external struct {
-	// A 'client' used to connect to the external resource API. In practice this
-	// would be something like an AWS SDK client.
-	service *NbService
-	log     logr.Logger
+	authManager *auth.AuthManager
+	log         logr.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -168,12 +124,16 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbNetworkResource)
 	}
+	client, err := c.authManager.GetClient(ctx)
+	if err != nil {
+		return managed.ExternalObservation{}, errors.Wrap(err, "failed to get authenticated client")
+	}
 	c.log.Info("observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
-	networks, err := c.service.nbCli.Networks.List(ctx)
+	networks, err := client.Networks.List(ctx)
 	if err != nil {
 		c.log.Error(err, "received error on call to nb listing networks")
 		return managed.ExternalObservation{
@@ -191,7 +151,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			ResourceExists: false,
 		}, errors.New("network name not found")
 	}
-	networkresource, err := c.service.nbCli.Networks.Resources(apinetwork.Id).Get(ctx, externalName)
+	networkresource, err := client.Networks.Resources(apinetwork.Id).Get(ctx, externalName)
 	if err != nil {
 		return managed.ExternalObservation{
 			ResourceExists: false,
@@ -234,8 +194,12 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalCreation{}, errors.New(errNotNbNetworkResource)
 	}
+	client, err := c.authManager.GetClient(ctx)
+	if err != nil {
+		return managed.ExternalCreation{}, errors.Wrap(err, "failed to get authenticated client")
+	}
 	c.log.Info("creating", "cr", cr)
-	networks, err := c.service.nbCli.Networks.List(ctx)
+	networks, err := client.Networks.List(ctx)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
@@ -248,7 +212,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	if apinetwork == nil {
 		return managed.ExternalCreation{}, errors.New("network name not found")
 	}
-	groups, err := c.service.nbCli.Groups.List(ctx)
+	groups, err := client.Groups.List(ctx)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
@@ -261,7 +225,7 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 			}
 		}
 	}
-	networkresource, err := c.service.nbCli.Networks.Resources(apinetwork.Id).Create(ctx, nbapi.NetworkResourceRequest{
+	networkresource, err := client.Networks.Resources(apinetwork.Id).Create(ctx, nbapi.NetworkResourceRequest{
 		Enabled:     cr.Spec.ForProvider.Enabled,
 		Address:     cr.Spec.ForProvider.Address,
 		Description: cr.Spec.ForProvider.Description,
@@ -289,9 +253,13 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if !ok {
 		return managed.ExternalUpdate{}, errors.New(errNotNbNetworkResource)
 	}
+	client, err := c.authManager.GetClient(ctx)
+	if err != nil {
+		return managed.ExternalUpdate{}, errors.Wrap(err, "failed to get authenticated client")
+	}
 	networkResourceId := meta.GetExternalName(cr)
 	c.log.Info("Updating", "cr", cr)
-	networks, err := c.service.nbCli.Networks.List(ctx)
+	networks, err := client.Networks.List(ctx)
 	if err != nil {
 		return managed.ExternalUpdate{}, err
 	}
@@ -304,7 +272,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if apinetwork == nil {
 		return managed.ExternalUpdate{}, errors.New("network name not found")
 	}
-	groups, err := c.service.nbCli.Groups.List(ctx)
+	groups, err := client.Groups.List(ctx)
 	if err != nil {
 		return managed.ExternalUpdate{}, err
 	}
@@ -318,7 +286,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		}
 	}
 
-	_, err2 := c.service.nbCli.Networks.Resources(apinetwork.Id).Update(ctx, networkResourceId, nbapi.PutApiNetworksNetworkIdResourcesResourceIdJSONRequestBody{
+	_, err2 := client.Networks.Resources(apinetwork.Id).Update(ctx, networkResourceId, nbapi.PutApiNetworksNetworkIdResourcesResourceIdJSONRequestBody{
 		Enabled:     cr.Spec.ForProvider.Enabled,
 		Address:     cr.Spec.ForProvider.Address,
 		Description: cr.Spec.ForProvider.Description,
@@ -341,9 +309,12 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	if !ok {
 		return errors.New(errNotNbNetworkResource)
 	}
-
+	client, err := c.authManager.GetClient(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get authenticated client")
+	}
 	c.log.Info("Deleting", "cr", cr)
-	networks, err := c.service.nbCli.Networks.List(ctx)
+	networks, err := client.Networks.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -357,5 +328,5 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 		return errors.New("network not found")
 	}
 	networkresourceid := meta.GetExternalName(cr)
-	return c.service.nbCli.Networks.Resources(apinetwork.Id).Delete(ctx, networkresourceid)
+	return client.Networks.Resources(apinetwork.Id).Delete(ctx, networkresourceid)
 }

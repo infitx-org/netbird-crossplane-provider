@@ -25,19 +25,13 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-)
 
-// Unlike many Kubernetes projects Crossplane does not use third party testing
-// libraries, per the common Go test review comments. Crossplane encourages the
-// use of table driven unit tests. The tests of the crossplane-runtime project
-// are representative of the testing style Crossplane encourages.
-//
-// https://github.com/golang/go/wiki/TestComments
-// https://github.com/crossplane/crossplane/blob/master/CONTRIBUTING.md#contributing-code
+	auth "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
+)
 
 func TestObserve(t *testing.T) {
 	type fields struct {
-		service *NbService
+		authManager *auth.AuthManager
 	}
 
 	type args struct {
@@ -61,7 +55,7 @@ func TestObserve(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := external{service: tc.fields.service}
+			e := external{authManager: tc.fields.authManager}
 			got, err := e.Observe(tc.args.ctx, tc.args.mg)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\ne.Observe(...): -want error, +got error:\n%s\n", tc.reason, diff)

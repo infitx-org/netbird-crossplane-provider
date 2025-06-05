@@ -29,7 +29,7 @@ import (
 type ProviderConfigSpec struct {
 	// Credentials required to authenticate to this provider.
 	Credentials     ProviderCredentials `json:"credentials"`
-	MmanagementURI  string              `json:"management-uri"`
+	ManagementURI   string              `json:"management-uri"`
 	CredentialsType string              `json:"credentials-type"`
 	OauthIssuerUrl  string              `json:"oauth-issuer-url,omitempty"`
 }

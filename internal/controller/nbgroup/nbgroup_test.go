@@ -25,6 +25,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
+	auth "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 )
 
 // Unlike many Kubernetes projects Crossplane does not use third party testing
@@ -37,7 +38,7 @@ import (
 
 func TestObserve(t *testing.T) {
 	type fields struct {
-		service *NbService
+		authManager *auth.AuthManager
 	}
 
 	type args struct {
@@ -61,7 +62,7 @@ func TestObserve(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := external{service: tc.fields.service}
+			e := external{authManager: tc.fields.authManager}
 			got, err := e.Observe(tc.args.ctx, tc.args.mg)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\ne.Observe(...): -want error, +got error:\n%s\n", tc.reason, diff)
