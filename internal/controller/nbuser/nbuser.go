@@ -179,10 +179,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		IsServiceUser: apiuser.IsServiceUser,
 		Issued:        apiuser.Issued,
 		Name:          apiuser.Name,
-		Permissions: &v1alpha1.UserPermissions{
-			DashboardView: (*v1alpha1.UserPermissionsDashboardView)(apiuser.Permissions.DashboardView),
-		},
-		Status: v1alpha1.UserStatus(apiuser.Status),
+		Status:        v1alpha1.UserStatus(apiuser.Status),
 	}
 	if !*cr.Spec.ForProvider.IsServiceUser {
 		meta.SetExternalName(cr, apiuser.Id)

@@ -57,8 +57,7 @@ type NbUserObservation struct {
 	Issued *string `json:"issued,omitempty"`
 
 	// Name User's name from idp provider
-	Name        string           `json:"name"`
-	Permissions *UserPermissions `json:"permissions,omitempty"`
+	Name string `json:"name"`
 
 	// Role User's NetBird account role
 	Role string `json:"role"`
