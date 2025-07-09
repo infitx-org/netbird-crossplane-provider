@@ -19,7 +19,5 @@ spec:
         enabled: true
         sources:
           - name: All
-        port_ranges:
-          - start: 80
-            end: 80
+        ports: ["80", "443"]
         protocol: tcp
