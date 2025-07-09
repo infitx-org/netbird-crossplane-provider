@@ -35,20 +35,20 @@ kind: ProviderConfig
 metadata:
   name: netbird-crossplane-provider-config
 spec:
-  management-uri: https://netbird.ccinfra03.drpp-onprem.global:443
+  management-uri: https://netbird.ccinfra05.drpp-onprem.global:443
   credentials-type: oauth
-  oauth-issuer-url: https://zitadel.ccinfra03.drpp-onprem.global/oauth/v2/token
+  oauth-issuer-url: https://zitadel.ccinfra05.drpp-onprem.global/oauth/v2/token
   credentials:
     source: Secret
     secretRef:
       namespace: crossplane-system
       name: example-oauth-prov-secret
       key: credentials
----
-apiVersion: kubernetes.crossplane.io/v1alpha1
-kind: ProviderConfig
-metadata:
-  name: kubernetes-provider
-spec:
-  credentials:
-    source: InjectedIdentity
+# ---
+# apiVersion: kubernetes.crossplane.io/v1alpha1
+# kind: ProviderConfig
+# metadata:
+#   name: kubernetes-provider
+# spec:
+#   credentials:
+#     source: InjectedIdentity

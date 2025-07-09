@@ -138,9 +138,44 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	c.log.Info("Observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
+
+	// Adoption pattern: if externalName is blank or matches the resource name, try to find by Name
+	if externalName == "" || externalName == cr.Name {
+		// List all setup keys and try to find one with the same name
+		setupKeys, err := client.SetupKeys.List(ctx)
+		if err != nil {
+			c.log.Error(err, "failed to list setup keys for adoption")
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
+		for _, sk := range setupKeys {
+			if sk.Name == cr.Spec.ForProvider.Name {
+				// Found a match, set external name and force requeue
+				meta.SetExternalName(cr, sk.Id)
+				cr.Status.AtProvider = v1alpha1.NbSetupKeyObservation{
+					Id:                  sk.Id,
+					AllowExtraDnsLabels: sk.AllowExtraDnsLabels,
+					AutoGroups:          &sk.AutoGroups,
+					Ephemeral:           sk.Ephemeral,
+					Expires:             sk.Expires.String(),
+					LastUsed:            sk.LastUsed.String(),
+					Name:                sk.Name,
+					Revoked:             sk.Revoked,
+					State:               sk.State,
+					Type:                sk.Type,
+				}
+				cr.Status.SetConditions(xpv1.Available())
+				return managed.ExternalObservation{
+					ResourceExists:    true,
+					ResourceUpToDate:  false, // force requeue to persist external name
+					ConnectionDetails: managed.ConnectionDetails{},
+				}, nil
+			}
+		}
+		// Not found by name, treat as not existing
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+
+	// If we have an external name (and it's not just the resource name), fetch by ID
 	setupkey, err := client.SetupKeys.Get(ctx, externalName)
 	if err != nil {
 		c.log.Error(err, "setupkey not found")

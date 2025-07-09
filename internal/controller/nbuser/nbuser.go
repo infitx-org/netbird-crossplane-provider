@@ -137,6 +137,95 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to get authenticated client")
 	}
 	c.log.Info("observing", "cr", cr)
+
+	externalName := meta.GetExternalName(cr)
+	// Adoption pattern: handle each case separately
+	if externalName == "" || externalName == cr.Name {
+		c.log.Info("external name blank or matches resource name, attempting adoption by Email or Name")
+		users, err := client.Users.List(ctx)
+		if err != nil {
+			c.log.Error(err, "received error on call to nb listing users")
+			return managed.ExternalObservation{ResourceExists: false}, err
+		}
+		var apiuser *nbapi.User
+		if !*cr.Spec.ForProvider.IsServiceUser {
+			for _, user := range users {
+				if cr.Spec.ForProvider.Email != "" && user.Email == cr.Spec.ForProvider.Email {
+					apiuser = &user
+					break
+				}
+			}
+		} else {
+			for _, user := range users {
+				if user.Name == cr.Spec.ForProvider.Name {
+					apiuser = &user
+					break
+				}
+			}
+		}
+		if apiuser != nil {
+			c.log.Info("found existing user for adoption", "userid", apiuser.Id)
+			meta.SetExternalName(cr, apiuser.Id)
+			cr.Status.SetConditions(xpv1.Available())
+			cr.Status.AtProvider = v1alpha1.NbUserObservation{
+				Id:            apiuser.Id,
+				AutoGroups:    &apiuser.AutoGroups,
+				Email:         apiuser.Email,
+				Role:          apiuser.Role,
+				IsBlocked:     apiuser.IsBlocked,
+				IsCurrent:     apiuser.IsCurrent,
+				IsServiceUser: apiuser.IsServiceUser,
+				Issued:        apiuser.Issued,
+				Name:          apiuser.Name,
+				Status:        v1alpha1.UserStatus(apiuser.Status),
+			}
+			return managed.ExternalObservation{
+				ResourceExists:   true,
+				ResourceUpToDate: IsUserUpToDate(cr.Spec.ForProvider, *apiuser),
+			}, nil
+		}
+		// Not found, resource does not exist
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
+	if externalName == cr.Spec.ForProvider.Name {
+		// Only check for existence, do not set external name
+		c.log.Info("external name matches ForProvider.Name, checking existence only", "name", cr.Spec.ForProvider.Name)
+		users, err := client.Users.List(ctx)
+		if err != nil {
+			c.log.Error(err, "received error on call to nb listing users")
+			return managed.ExternalObservation{ResourceExists: false}, err
+		}
+		var apiuser *nbapi.User
+		for _, user := range users {
+			if user.Name == externalName {
+				apiuser = &user
+				break
+			}
+		}
+		if apiuser != nil {
+			cr.Status.SetConditions(xpv1.Available())
+			cr.Status.AtProvider = v1alpha1.NbUserObservation{
+				Id:            apiuser.Id,
+				AutoGroups:    &apiuser.AutoGroups,
+				Email:         apiuser.Email,
+				Role:          apiuser.Role,
+				IsBlocked:     apiuser.IsBlocked,
+				IsCurrent:     apiuser.IsCurrent,
+				IsServiceUser: apiuser.IsServiceUser,
+				Issued:        apiuser.Issued,
+				Name:          apiuser.Name,
+				Status:        v1alpha1.UserStatus(apiuser.Status),
+			}
+			return managed.ExternalObservation{
+				ResourceExists:   true,
+				ResourceUpToDate: IsUserUpToDate(cr.Spec.ForProvider, *apiuser),
+			}, nil
+		}
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
+	// If externalName is set, fetch by ID as usual
 	users, err := client.Users.List(ctx)
 	if err != nil {
 		c.log.Error(err, "received error on call to nb listing users")
@@ -144,53 +233,36 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			ResourceExists: false,
 		}, err
 	}
-	var apiuser *nbapi.User
-	if !*cr.Spec.ForProvider.IsServiceUser {
-		for _, user := range users {
-			if cr.Spec.ForProvider.Email != "" && user.Email == cr.Spec.ForProvider.Email {
-				apiuser = &user
-			}
+	var user *nbapi.User
+	for _, u := range users {
+		if u.Id == externalName {
+			user = &u
+			break
 		}
-		if apiuser == nil {
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, errors.New("user doesn't exist")
-		}
-	} else {
-		for _, user := range users {
-			if user.Name == cr.Spec.ForProvider.Name {
-				apiuser = &user
-			}
-		}
-		if apiuser == nil {
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, nil
-		}
+	}
+	if user == nil {
+		c.log.Error(nil, "user not found by externalName", "externalName", externalName)
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil
 	}
 
 	cr.Status.AtProvider = v1alpha1.NbUserObservation{
-		Id:            apiuser.Id,
-		AutoGroups:    &apiuser.AutoGroups,
-		Email:         apiuser.Email,
-		Role:          apiuser.Role,
-		IsBlocked:     apiuser.IsBlocked,
-		IsCurrent:     apiuser.IsCurrent,
-		IsServiceUser: apiuser.IsServiceUser,
-		Issued:        apiuser.Issued,
-		Name:          apiuser.Name,
-		Status:        v1alpha1.UserStatus(apiuser.Status),
+		Id:            user.Id,
+		AutoGroups:    &user.AutoGroups,
+		Email:         user.Email,
+		Role:          user.Role,
+		IsBlocked:     user.IsBlocked,
+		IsCurrent:     user.IsCurrent,
+		IsServiceUser: user.IsServiceUser,
+		Issued:        user.Issued,
+		Name:          user.Name,
+		Status:        v1alpha1.UserStatus(user.Status),
 	}
-	if !*cr.Spec.ForProvider.IsServiceUser {
-		meta.SetExternalName(cr, apiuser.Id)
-	}
-	uptodate := IsUserUpToDate(cr.Spec.ForProvider, *apiuser)
 	cr.Status.SetConditions(xpv1.Available())
-
 	return managed.ExternalObservation{
-		ResourceExists:    true,
-		ResourceUpToDate:  uptodate,
-		ConnectionDetails: managed.ConnectionDetails{},
+		ResourceExists:   true,
+		ResourceUpToDate: IsUserUpToDate(cr.Spec.ForProvider, *user),
 	}, nil
 }
 

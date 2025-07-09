@@ -22,8 +22,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
@@ -133,35 +131,72 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to get authenticated client")
 	}
-	// These fmt statements should be removed in the real implementation.
 	c.log.Info("Observing", "cr", cr)
+
 	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
-		c.log.Info("didn't find externalname")
+	// Adoption pattern: if externalName is blank or matches cr.Name, try to find by unique field (token name + user)
+	if externalName == "" || externalName == cr.Name {
+		c.log.Info("external name blank or matches resource name, attempting adoption by token name and user")
+		var userid string
+		if cr.Spec.ForProvider.UserName != nil {
+			users, err := client.Users.List(ctx)
+			if err != nil {
+				return managed.ExternalObservation{ResourceExists: false}, err
+			}
+			var apiuser *nbapi.User
+			for _, user := range users {
+				if *user.IsServiceUser && (user.Name == *cr.Spec.ForProvider.UserName) {
+					apiuser = &user
+					break
+				}
+			}
+			if apiuser == nil {
+				return managed.ExternalObservation{ResourceExists: false}, nil
+			}
+			userid = apiuser.Id
+		} else if cr.Spec.ForProvider.UserId != nil {
+			userid = *cr.Spec.ForProvider.UserId
+		} else {
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
+		tokens, err := client.Tokens.List(ctx, userid)
+		if err != nil {
+			return managed.ExternalObservation{ResourceExists: false}, err
+		}
+		for _, token := range tokens {
+			if token.Name == cr.Spec.ForProvider.Name {
+				c.log.Info("found existing access token for adoption", "tokenid", token.Id)
+				meta.SetExternalName(cr, token.Id)
+				// Return early so reconciler persists external name and requeues
+				return managed.ExternalObservation{ResourceExists: false}, nil
+			}
+		}
+		// Not found, resource does not exist
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+
+	// If externalName is set, fetch by ID as usual
 	var userid string
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := client.Users.List(ctx)
 		if err != nil {
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, err
+			return managed.ExternalObservation{ResourceExists: false}, err
 		}
 		var apiuser *nbapi.User
 		for _, user := range users {
 			if *user.IsServiceUser && (user.Name == *cr.Spec.ForProvider.UserName) {
 				apiuser = &user
+				break
 			}
 		}
 		if apiuser == nil {
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, errors.New("username doesn't exist")
+			return managed.ExternalObservation{ResourceExists: false}, nil
 		}
 		userid = apiuser.Id
-	} else {
+	} else if cr.Spec.ForProvider.UserId != nil {
 		userid = *cr.Spec.ForProvider.UserId
+	} else {
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
 	accesstoken, err := client.Tokens.Get(ctx, userid, externalName)
@@ -177,37 +212,22 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		lastused = &lastusedstring
 	}
 	if accesstoken.ExpirationDate.Before(time.Now()) {
-		cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{}
-		cr.Status.SetConditions(xpv1.Condition{Type: "Expired",
-			Status:             v1.ConditionTrue,
-			Reason:             "TimestampExpired",
-			Message:            "Resource has expired and needs recreation",
-			LastTransitionTime: metav1.Now(),
-		})
+		// Token exists but is expired: trigger Update, not Create
 		return managed.ExternalObservation{
-			ResourceExists:    true,
-			ResourceUpToDate:  false,
-			ConnectionDetails: managed.ConnectionDetails{},
+			ResourceExists:   true,
+			ResourceUpToDate: false,
 		}, nil
 	}
 	cr.Status.AtProvider = v1alpha1.NbAccessTokenObservation{
 		Id:             accesstoken.Id,
-		CreatedAt:      accesstoken.CreatedBy,
-		ExpirationDate: accesstoken.ExpirationDate.Local().String(),
-		CreatedBy:      accesstoken.CreatedBy,
-		LastUsed:       lastused,
 		Name:           accesstoken.Name,
+		ExpirationDate: accesstoken.ExpirationDate.String(),
+		LastUsed:       lastused,
 	}
-	cr.Status.SetConditions(xpv1.Available(), xpv1.Condition{Type: "Expired",
-		Status:             v1.ConditionFalse,
-		Reason:             "TimestampExpired",
-		Message:            "Resource has expired and needs recreation",
-		LastTransitionTime: metav1.Now(),
-	})
+	cr.Status.SetConditions(xpv1.Available())
 	return managed.ExternalObservation{
-		ResourceExists:    true,
-		ResourceUpToDate:  true,
-		ConnectionDetails: managed.ConnectionDetails{},
+		ResourceExists:   true,
+		ResourceUpToDate: true, // update logic can be added if needed
 	}, nil
 }
 

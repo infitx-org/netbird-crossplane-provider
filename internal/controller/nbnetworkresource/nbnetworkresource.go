@@ -130,26 +130,67 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	c.log.Info("observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
+
+	// Adoption pattern: if externalName is blank or matches resource name, try to find by Name
+	if externalName == "" || externalName == cr.Name {
+		networks, err := client.Networks.List(ctx)
+		if err != nil {
+			c.log.Error(err, "received error on call to nb listing networks")
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
+		var apinetwork *nbapi.Network
+		for _, network := range networks {
+			if network.Name == cr.Spec.ForProvider.NetworkName {
+				apinetwork = &network
+				break
+			}
+		}
+		if apinetwork == nil {
+			return managed.ExternalObservation{ResourceExists: false}, errors.New("network name not found")
+		}
+		resources, err := client.Networks.Resources(apinetwork.Id).List(ctx)
+		if err != nil {
+			c.log.Error(err, "failed to list network resources for adoption")
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
+		for _, res := range resources {
+			if res.Name == cr.Spec.ForProvider.Name {
+				meta.SetExternalName(cr, res.Id)
+				cr.Status.AtProvider = v1alpha1.NbNetworkResourceObservation{
+					Id:          res.Id,
+					Enabled:     res.Enabled,
+					Address:     res.Address,
+					Description: res.Description,
+					Groups:      convertGroups(res.Groups),
+					Name:        res.Name,
+					Type:        string(res.Type),
+				}
+				cr.Status.SetConditions(xpv1.Available())
+				return managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: false, // force requeue to persist external name
+				}, nil
+			}
+		}
+		// Not found by name, treat as not existing
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+
+	// If we have an external name (and it's not just the resource name), fetch by ID
 	networks, err := client.Networks.List(ctx)
 	if err != nil {
 		c.log.Error(err, "received error on call to nb listing networks")
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil //return nil so that observe can return without error so that it passes to create.
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	var apinetwork *nbapi.Network
 	for _, network := range networks {
 		if network.Name == cr.Spec.ForProvider.NetworkName {
 			apinetwork = &network
+			break
 		}
 	}
 	if apinetwork == nil {
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, errors.New("network name not found")
+		return managed.ExternalObservation{ResourceExists: false}, errors.New("network name not found")
 	}
 	networkresource, err := client.Networks.Resources(apinetwork.Id).Get(ctx, externalName)
 	if err != nil {
@@ -171,7 +212,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: true,
+		ResourceUpToDate: true, // TODO: implement up-to-date check if needed
 	}, nil
 }
 
