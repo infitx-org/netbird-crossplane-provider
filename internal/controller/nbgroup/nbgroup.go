@@ -137,23 +137,42 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	c.log.Info("Observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
-		c.log.Info("external name blank")
-		return managed.ExternalObservation{ResourceExists: false}, nil
-	}
-	c.log.Info("external name", "externalName", externalName)
-	var group nbapi.Group
 
-	//this only happens on first observe of resource that needs to be created
-	if externalName == cr.Name {
+	// Adoption pattern: handle each case separately
+	if externalName == "" || externalName == cr.Name {
+		c.log.Info("external name blank or matches resource name, attempting adoption by Name", "name", cr.Spec.ForProvider.Name)
+		groups, err := client.Groups.List(ctx)
+		if err != nil {
+			c.log.Error(err, "received error on call to nb listing groups")
+			return managed.ExternalObservation{ResourceExists: false}, err
+		}
+		for _, apigroup := range groups {
+			if apigroup.Name == cr.Spec.ForProvider.Name {
+				c.log.Info("found existing group for adoption", "groupid", apigroup.Id)
+				meta.SetExternalName(cr, apigroup.Id)
+				cr.Status.SetConditions(xpv1.Available())
+				cr.Status.AtProvider = v1alpha1.NbGroupObservation{
+					Id:             apigroup.Id,
+					Issued:         apigroup.Issued,
+					Peers:          apigroup.Peers,
+					PeersCount:     apigroup.PeersCount,
+					Resources:      apigroup.Resources,
+					ResourcesCount: apigroup.ResourcesCount,
+				}
+				c.log.Info("set atprovider id", "id", cr.Status.AtProvider.Id)
+				return managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: true, //since we don't update groups
+				}, nil
+			}
+		}
+		// Not found, resource does not exist
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
-	//by convention, for provider name = external name for existing resources with observe only
+
 	if externalName == cr.Spec.ForProvider.Name {
-		if meta.WasDeleted(mg) {
-			return managed.ExternalObservation{ResourceExists: false}, nil
-		}
-		c.log.Info("looking for existing group", "group", cr.Spec.ForProvider.Name)
+		// Only check for existence, do not set external name
+		c.log.Info("external name matches ForProvider.Name, checking existence only", "name", cr.Spec.ForProvider.Name)
 		groups, err := client.Groups.List(ctx)
 		if err != nil {
 			c.log.Error(err, "received error on call to nb listing groups")
@@ -161,23 +180,36 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}
 		for _, apigroup := range groups {
 			if apigroup.Name == externalName {
-				c.log.Info("found existing groupid", "groupid", apigroup.Id)
-				group = apigroup
-				break
+				c.log.Info("found existing group by ForProvider.Name", "groupid", apigroup.Id)
+				cr.Status.SetConditions(xpv1.Available())
+				cr.Status.AtProvider = v1alpha1.NbGroupObservation{
+					Id:             apigroup.Id,
+					Issued:         apigroup.Issued,
+					Peers:          apigroup.Peers,
+					PeersCount:     apigroup.PeersCount,
+					Resources:      apigroup.Resources,
+					ResourcesCount: apigroup.ResourcesCount,
+				}
+				c.log.Info("set atprovider id", "id", cr.Status.AtProvider.Id)
+				return managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: true, //since we don't update groups
+				}, nil
 			}
 		}
-		meta.SetExternalName(cr, group.Id)
-	} else //now we are going to find by id using externalname assuming that this is a resource originally created by this provider
-	{
-		apigroup, err := client.Groups.Get(ctx, externalName)
-		if err != nil {
-			c.log.Error(err, "received error on call to nb to get group", "group", externalName)
-			return managed.ExternalObservation{
-				ResourceExists: false,
-			}, nil //return nil so that observe can return without error so that it passes to create.
-		}
-		group = *apigroup
+		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+
+	c.log.Info("external name set, fetching by ID", "externalName", externalName)
+	apigroup, err := client.Groups.Get(ctx, externalName)
+	if err != nil {
+		c.log.Error(err, "received error on call to nb to get group", "group", externalName)
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil //return nil so that observe can return without error so that it passes to create.
+	}
+	group := *apigroup
+
 	cr.Status.SetConditions(xpv1.Available())
 	c.log.Info("setting atprovider")
 	cr.Status.AtProvider = v1alpha1.NbGroupObservation{

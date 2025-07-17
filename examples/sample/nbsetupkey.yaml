@@ -10,7 +10,7 @@ spec:
     expires_in: 86400
     revoked: false
     auto_groups:
-      - d0qrhcn0fs0c73al1uug
+      - d1n3jmj1l8qc73b21ji0
     usage_limit: 0
     ephemeral: false
   providerConfigRef:

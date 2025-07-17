@@ -10,7 +10,7 @@ spec:
     groups:
       - name: "cc-internal"
     address: "10.10.10.0/24"
-    network_name: ccinfra03
+    network_name: ccinfra05
 
   providerConfigRef:
     name: "netbird-crossplane-provider-config"

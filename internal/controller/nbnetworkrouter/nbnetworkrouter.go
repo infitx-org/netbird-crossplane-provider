@@ -133,20 +133,102 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	c.log.Info("observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
+
+	// Adoption pattern: if externalName is blank or matches cr.Name, try to find by PeerGroupName or Peer
+	if externalName == "" || externalName == cr.Name {
+		c.log.Info("external name blank or matches resource name, attempting adoption by PeerGroupName or Peer")
+		networks, err := client.Networks.List(ctx)
+		if err != nil {
+			c.log.Error(err, "received error on call to nb listing networks")
+			return managed.ExternalObservation{ResourceExists: false}, err
+		}
+		var apinetwork *nbapi.Network
+		for _, network := range networks {
+			if network.Name == cr.Spec.ForProvider.NetworkName {
+				apinetwork = &network
+				break
+			}
+		}
+		if apinetwork == nil {
+			return managed.ExternalObservation{}, errors.New("network not found")
+		}
+		routers, err := client.Networks.Routers(apinetwork.Id).List(ctx)
+		if err != nil {
+			c.log.Error(err, "failed to list network routers for adoption")
+			return managed.ExternalObservation{ResourceExists: false}, err
+		}
+		for _, router := range routers {
+			if cr.Spec.ForProvider.PeerGroupName != "" {
+				if router.PeerGroups != nil && len(*router.PeerGroups) > 0 {
+					// Find the group ID for the PeerGroupName
+					groups, err := client.Groups.List(ctx)
+					if err != nil {
+						c.log.Error(err, "failed to list groups for adoption")
+						continue
+					}
+					var groupID string
+					for _, g := range groups {
+						if g.Name == cr.Spec.ForProvider.PeerGroupName {
+							groupID = g.Id
+							break
+						}
+					}
+					if groupID == "" {
+						c.log.Info("PeerGroupName not found in Netbird groups", "PeerGroupName", cr.Spec.ForProvider.PeerGroupName)
+						continue
+					}
+					c.log.Info("external name blank or matches resource name, attempting adoption by PeerGroupName")
+					cr.Status.AtProvider = v1alpha1.NbNetworkRouterObservation{
+						Id:         router.Id,
+						Enabled:    router.Enabled,
+						Masquerade: router.Masquerade,
+						Metric:     router.Metric,
+						PeerGroup:  &groupID,
+						Peer:       nil,
+					}
+					cr.Status.SetConditions(xpv1.Available())
+					meta.SetExternalName(cr, router.Id)
+					return managed.ExternalObservation{
+						ResourceExists:   true,
+						ResourceUpToDate: false, // force requeue to persist external name
+					}, nil
+				}
+				continue
+			}
+			if cr.Spec.ForProvider.PeerGroupName == "" && cr.Spec.ForProvider.Peer != nil && router.Peer != nil && *router.Peer == *cr.Spec.ForProvider.Peer {
+				c.log.Info("external name blank or matches resource name, attempting adoption by Peer ID")
+				cr.Status.AtProvider = v1alpha1.NbNetworkRouterObservation{
+					Id:         router.Id,
+					Enabled:    router.Enabled,
+					Masquerade: router.Masquerade,
+					Metric:     router.Metric,
+					PeerGroup:  nil,
+					Peer:       router.Peer,
+				}
+				cr.Status.SetConditions(xpv1.Available())
+				meta.SetExternalName(cr, router.Id)
+				return managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: false, // force requeue to persist external name
+				}, nil
+			}
+		}
+		// Not found by group or peer, treat as not existing
+		c.log.Info("external name blank or matches resource name, couldn't find by PeerGroupName or Peer")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+
+	// If we have an external name (and it's not just the resource name), fetch by ID
 	networks, err := client.Networks.List(ctx)
 	if err != nil {
 		c.log.Error(err, "received error on call to nb listing networks")
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, err
+		return managed.ExternalObservation{ResourceExists: false}, err
 	}
 	var apinetwork *nbapi.Network
 	for _, network := range networks {
 		if network.Name == cr.Spec.ForProvider.NetworkName {
 			apinetwork = &network
+			break
 		}
 	}
 	if apinetwork == nil {
@@ -182,7 +264,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: true,
+		ResourceUpToDate: true, // TODO: implement up-to-date check if needed
 	}, nil
 }
 

@@ -12,11 +12,12 @@ spec:
     rules:
       - name: xplanepolicytestrule2
         action: accept
-        bidirectional: true
+        bidirectional: false
         description: test rule
         destinations:
-          - name: All
+          - name: xplanepeergrouptest
         enabled: true
         sources:
           - name: All
+        ports: ["80", "443"]
         protocol: tcp

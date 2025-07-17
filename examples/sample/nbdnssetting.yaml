@@ -4,12 +4,9 @@ metadata:
   name: xplanednssettingtest
 spec:
   managementPolicies:
-    - "Observe"
-    - "Update"
-    - "Create"
-    - "LateInitialize"
+    - "*"
   providerConfigRef:
     name: "netbird-crossplane-provider-config"
   forProvider:
     disabled_management_groups:
-      - d0ci90kmo3bc73e51c7g
+      - d10ksge9ejpc73adti9g

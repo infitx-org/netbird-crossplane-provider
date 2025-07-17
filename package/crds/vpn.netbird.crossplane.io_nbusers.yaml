@@ -288,12 +288,6 @@ spec:
                   name:
                     description: Name User's name from idp provider
                     type: string
-                  permissions:
-                    properties:
-                      dashboard_view:
-                        description: DashboardView User's permission to view the dashboard
-                        type: string
-                    type: object
                   role:
                     description: Role User's NetBird account role
                     type: string

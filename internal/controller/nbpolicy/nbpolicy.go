@@ -133,13 +133,31 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to get authenticated client")
 	}
-	// These fmt statements should be removed in the real implementation.
 	c.log.Info("Observing", "cr", cr)
 
 	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
+	// Adoption pattern: if externalName is blank or matches cr.Name, try to find by Name
+	if externalName == "" || externalName == cr.Name {
+		c.log.Info("external name blank or matches resource name, attempting adoption by Name", "name", cr.Spec.ForProvider.Name)
+		policies, err := client.Policies.List(ctx)
+		if err != nil {
+			c.log.Error(err, "received error on call to nb listing policies")
+			return managed.ExternalObservation{ResourceExists: false}, err
+		}
+		for _, apipolicy := range policies {
+			if apipolicy.Name == cr.Spec.ForProvider.Name {
+				c.log.Info("found existing policy for adoption", "policyid", apipolicy.Id)
+				meta.SetExternalName(cr, *apipolicy.Id)
+				return managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: false, // force a requeue for a fresh Observe
+				}, nil
+			}
+		}
+		// Not found, resource does not exist
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
+
 	policy, err := client.Policies.Get(ctx, externalName)
 	if err != nil {
 		c.log.Error(err, "received error on call to nb getting policy")
@@ -322,31 +340,87 @@ func NbToApiGroupMinimums(groupMinimums *[]v1alpha1.GroupMinimum, groups []nbapi
 }
 
 func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi.Policy, c *external) bool {
+	c.log.Info("Checking if API policy is up to date", "policy", policy)
+	c.log.Info("Checking if API policy is up to date", "nbPolicy", nbPolicy)
 	if nbPolicy.Rules == nil || policy.Rules == nil {
 		c.log.Info("one of the rules is nil")
 		return false
 	}
 	policyrules := ApiToNBRules(policy.Rules)
+	if policyrules == nil || len(*policyrules) != len(nbPolicy.Rules) {
+		c.log.Info("rules length doesn't match or rules is nil")
+		return false
+	}
 	for i, policyrule := range *policyrules {
-		if !cmp.Equal(policyrule.Description, policy.Rules[i].Description) {
+		c.log.Info("Checking if rules is up to date", "policyrule", policyrule)
+		c.log.Info("Checking if rules is up to date", "nbPolicy.Rules[i]", nbPolicy.Rules[i])
+		if !cmp.Equal(policyrule.Description, nbPolicy.Rules[i].Description) {
 			c.log.Info("Description doesn't match")
 			return false
 		}
-		if !cmp.Equal(policyrule.Action, string(policy.Rules[i].Action)) {
+		if !cmp.Equal(policyrule.Action, string(nbPolicy.Rules[i].Action)) {
 			c.log.Info("action doesn't match")
 			return false
 		}
-		if !cmp.Equal(policyrule.Bidirectional, policy.Rules[i].Bidirectional) {
+		if !cmp.Equal(policyrule.Bidirectional, nbPolicy.Rules[i].Bidirectional) {
 			c.log.Info("bidirectional doesn't match")
 			return false
 		}
-		if !reflect.DeepEqual(*policyrule.Destinations, *ApiToNBGroupMinimums(policy.Rules[i].Destinations)) {
-			c.log.Info("destinations don't match")
+		// Compare only the Name field of each destination
+		destA := policyrule.Destinations
+		destB := nbPolicy.Rules[i].Destinations
+		if destA == nil || destB == nil || len(*destA) != len(*destB) {
+			c.log.Info("destinations length doesn't match or is nil")
 			return false
 		}
-		if !reflect.DeepEqual(*policyrule.Sources, *ApiToNBGroupMinimums(policy.Rules[i].Sources)) {
-			c.log.Info("sources don't match")
+		for j := range *destA {
+			if (*destA)[j].Name == nil || (*destB)[j].Name == nil || *(*destA)[j].Name != *(*destB)[j].Name {
+				c.log.Info("destination name doesn't match", "index", j)
+				return false
+			}
+		}
+		// Compare only the Name field of each source
+		srcA := policyrule.Sources
+		srcB := nbPolicy.Rules[i].Sources
+		if srcA == nil || srcB == nil || len(*srcA) != len(*srcB) {
+			c.log.Info("sources length doesn't match or is nil")
 			return false
+		}
+		for j := range *srcA {
+			if (*srcA)[j].Name == nil || (*srcB)[j].Name == nil || *(*srcA)[j].Name != *(*srcB)[j].Name {
+				c.log.Info("source name doesn't match", "index", j)
+				return false
+			}
+		}
+		// PortRanges nil check and comparison
+		if policyrule.PortRanges == nil && nbPolicy.Rules[i].PortRanges != nil {
+			c.log.Info("port ranges: API nil, spec not nil")
+			return false
+		}
+		if policyrule.PortRanges != nil && nbPolicy.Rules[i].PortRanges == nil {
+			c.log.Info("port ranges: API not nil, spec nil")
+			return false
+		}
+		if policyrule.PortRanges != nil && nbPolicy.Rules[i].PortRanges != nil {
+			if !reflect.DeepEqual(*policyrule.PortRanges, nbPolicy.Rules[i].PortRanges) {
+				c.log.Info("port ranges don't match")
+				return false
+			}
+		}
+		// Ports nil check and comparison
+		if policyrule.Ports == nil && nbPolicy.Rules[i].Ports != nil {
+			c.log.Info("ports: API nil, spec not nil")
+			return false
+		}
+		if policyrule.Ports != nil && nbPolicy.Rules[i].Ports == nil {
+			c.log.Info("ports: API not nil, spec nil")
+			return false
+		}
+		if policyrule.Ports != nil && nbPolicy.Rules[i].Ports != nil {
+			if !reflect.DeepEqual(policyrule.Ports, nbPolicy.Rules[i].Ports) {
+				c.log.Info("ports don't match")
+				return false
+			}
 		}
 	}
 	return true

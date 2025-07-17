@@ -121,7 +121,6 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if !ok {
 		return managed.ExternalObservation{}, errors.New(errNotNbAccount)
 	}
-
 	client, err := c.authManager.GetClient(ctx)
 	if err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to get authenticated client")

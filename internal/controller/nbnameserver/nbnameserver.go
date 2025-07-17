@@ -127,10 +127,33 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to get authenticated client")
 	}
 
+	// If externalName is empty, try to find the resource by Name (adoption pattern)
 	externalName := meta.GetExternalName(cr)
-	if externalName == "" {
-		return managed.ExternalObservation{ResourceExists: false}, nil
+	if externalName == "" || externalName == cr.Name {
+		// Attempt to find the resource by unique name
+		groups, err := client.DNS.ListNameserverGroups(ctx)
+		if err != nil {
+			return managed.ExternalObservation{}, errors.Wrap(err, "failed to list nameserver groups for adoption")
+		}
+		var found *nbapi.NameserverGroup
+		for _, g := range groups {
+			if g.Name == cr.Spec.ForProvider.Name {
+				found = &g
+				break
+			}
+		}
+		if found != nil {
+			meta.SetExternalName(cr, found.Id)
+			// Return early so the reconciler persists the external name and requeues
+			return managed.ExternalObservation{
+				ResourceExists:   true,
+				ResourceUpToDate: false, // force a requeue for a fresh Observe
+			}, nil
+		} else {
+			return managed.ExternalObservation{ResourceExists: false}, nil
+		}
 	}
+	// Now continue with normal observation using externalName
 
 	nameservergroup, err := client.DNS.GetNameserverGroup(ctx, externalName)
 	if err != nil {
