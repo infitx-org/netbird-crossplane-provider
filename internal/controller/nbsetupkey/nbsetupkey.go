@@ -18,10 +18,9 @@ package nbsetupkey
 
 import (
 	"context"
-	"reflect"
+	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -139,51 +138,30 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	c.log.Info("Observing", "cr", cr)
 	externalName := meta.GetExternalName(cr)
 
-	// Adoption pattern: if externalName is blank or matches the resource name, try to find by Name
-	if externalName == "" || externalName == cr.Name {
-		// List all setup keys and try to find one with the same name
-		setupKeys, err := client.SetupKeys.List(ctx)
-		if err != nil {
-			c.log.Error(err, "failed to list setup keys for adoption")
-			return managed.ExternalObservation{ResourceExists: false}, nil
-		}
-		for _, sk := range setupKeys {
-			if sk.Name == cr.Spec.ForProvider.Name {
-				// Found a match, set external name and force requeue
-				meta.SetExternalName(cr, sk.Id)
-				cr.Status.AtProvider = v1alpha1.NbSetupKeyObservation{
-					Id:                  sk.Id,
-					AllowExtraDnsLabels: sk.AllowExtraDnsLabels,
-					AutoGroups:          &sk.AutoGroups,
-					Ephemeral:           sk.Ephemeral,
-					Expires:             sk.Expires.String(),
-					LastUsed:            sk.LastUsed.String(),
-					Name:                sk.Name,
-					Revoked:             sk.Revoked,
-					State:               sk.State,
-					Type:                sk.Type,
-				}
-				cr.Status.SetConditions(xpv1.Available())
-				return managed.ExternalObservation{
-					ResourceExists:    true,
-					ResourceUpToDate:  false, // force requeue to persist external name
-					ConnectionDetails: managed.ConnectionDetails{},
-				}, nil
-			}
-		}
-		// Not found by name, treat as not existing
+	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	// If we have an external name (and it's not just the resource name), fetch by ID
+	// If we have an external name, fetch by ID
 	setupkey, err := client.SetupKeys.Get(ctx, externalName)
 	if err != nil {
-		c.log.Error(err, "setupkey not found")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("setupkey not found")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 
+	if setupkey.Expires.Before(time.Now()) || setupkey.Revoked {
+		// Token setupkey exists but is expired or revoked: trigger Update, not Create
+		return managed.ExternalObservation{
+			ResourceExists:   true,
+			ResourceUpToDate: false,
+		}, nil
+	}
 	cr.Status.AtProvider = v1alpha1.NbSetupKeyObservation{
 		Id:                  setupkey.Id,
 		AllowExtraDnsLabels: setupkey.AllowExtraDnsLabels,
@@ -201,23 +179,23 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	return managed.ExternalObservation{
 		ResourceExists:    true,
-		ResourceUpToDate:  isUpToDate(&cr.Spec.ForProvider, setupkey, c.log),
+		ResourceUpToDate:  true,
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
 
-func isUpToDate(nbSetupKeyParameters *v1alpha1.NbSetupKeyParameters, setupkey *api.SetupKey, log logr.Logger) bool {
+// func isUpToDate(nbSetupKeyParameters *v1alpha1.NbSetupKeyParameters, setupkey *api.SetupKey, log logr.Logger) bool {
 
-	if !reflect.DeepEqual(nbSetupKeyParameters.AutoGroups, setupkey.AutoGroups) {
-		log.Info("update failed on auto groups")
-		return false
-	}
-	if !cmp.Equal(nbSetupKeyParameters.Revoked, setupkey.Revoked) {
-		log.Info("update failed on revoked")
-		return false
-	}
-	return true
-}
+// 	if !reflect.DeepEqual(nbSetupKeyParameters.AutoGroups, setupkey.AutoGroups) {
+// 		log.Info("update failed on auto groups")
+// 		return false
+// 	}
+// 	if !cmp.Equal(nbSetupKeyParameters.Revoked, setupkey.Revoked) {
+// 		log.Info("update failed on revoked")
+// 		return false
+// 	}
+// 	return true
+// }
 
 func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr, ok := mg.(*v1alpha1.NbSetupKey)
@@ -269,17 +247,11 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	if setupKeyId == "" {
 		return managed.ExternalUpdate{}, errors.New("can't find setupKeyId")
 	}
-	_, err = client.SetupKeys.Update(ctx, setupKeyId, api.PutApiSetupKeysKeyIdJSONRequestBody{
-		AutoGroups: cr.Spec.ForProvider.AutoGroups,
-		Revoked:    cr.Spec.ForProvider.Revoked,
-	})
-
-	if err != nil {
-		return managed.ExternalUpdate{}, err
+	if err := client.SetupKeys.Delete(ctx, setupKeyId); err != nil {
+		return managed.ExternalUpdate{}, errors.Wrap(err, "failed to delete expired setupkey")
 	}
+	meta.SetExternalName(cr, "")
 	return managed.ExternalUpdate{
-		// Optionally return any details that may be required to connect to the
-		// external resource. These will be stored as the connection secret.
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
 }
@@ -295,5 +267,10 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 	c.log.Info("Deleting", "cr", cr)
 
-	return client.SetupKeys.Delete(ctx, meta.GetExternalName(cr))
+	err = client.SetupKeys.Delete(ctx, meta.GetExternalName(cr))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

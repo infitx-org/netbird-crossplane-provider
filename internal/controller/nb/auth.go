@@ -88,6 +88,25 @@ func (a *AuthManager) GetClient(ctx context.Context) (*netbird.Client, error) {
 	return a.client, nil
 }
 
+// IsTokenInvalidError checks if the error indicates an invalid token
+func IsTokenInvalidError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "token invalid") ||
+		strings.Contains(errStr, "unauthorized") ||
+		strings.Contains(errStr, "401")
+}
+
+// ForceRefresh forces a token refresh regardless of current token status
+func (a *AuthManager) ForceRefresh(ctx context.Context) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.log.Info("Force refreshing NetBird API token")
+	return a.refreshToken(ctx)
+}
+
 func (a *AuthManager) tokenNeedsRefresh() bool {
 	// Refresh if token is expired or will expire in 5 minutes
 	a.log.Info("a.lastTokenTime", "a.lastTokenTime", a.lastTokenTime)

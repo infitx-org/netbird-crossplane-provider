@@ -128,26 +128,38 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	accounts, err := client.Accounts.List(ctx)
 	if err != nil {
-		c.log.Error(err, "failed to list accounts")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to list accounts")
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 
 	accountusers, err := client.Users.List(ctx)
 	if err != nil {
-		c.log.Error(err, "failed to list users")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to list users")
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 
 	allgroups, err := client.Groups.List(ctx)
 	if err != nil {
-		c.log.Error(err, "failed to list groups")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to list groups")
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 
 	account := accounts[0]

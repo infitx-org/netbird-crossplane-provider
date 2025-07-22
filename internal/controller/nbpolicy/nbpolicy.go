@@ -141,8 +141,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		c.log.Info("external name blank or matches resource name, attempting adoption by Name", "name", cr.Spec.ForProvider.Name)
 		policies, err := client.Policies.List(ctx)
 		if err != nil {
-			c.log.Error(err, "received error on call to nb listing policies")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list policies")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		for _, apipolicy := range policies {
 			if apipolicy.Name == cr.Spec.ForProvider.Name {
@@ -160,7 +166,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	policy, err := client.Policies.Get(ctx, externalName)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb getting policy")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to get policy")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
