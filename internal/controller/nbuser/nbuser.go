@@ -144,8 +144,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		c.log.Info("external name blank or matches resource name, attempting adoption by Email or Name")
 		users, err := client.Users.List(ctx)
 		if err != nil {
-			c.log.Error(err, "received error on call to nb listing users")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list users")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		var apiuser *nbapi.User
 		if !*cr.Spec.ForProvider.IsServiceUser {
@@ -193,8 +199,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		c.log.Info("external name matches ForProvider.Name, checking existence only", "name", cr.Spec.ForProvider.Name)
 		users, err := client.Users.List(ctx)
 		if err != nil {
-			c.log.Error(err, "received error on call to nb listing users")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list users")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		var apiuser *nbapi.User
 		for _, user := range users {
@@ -228,10 +240,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// If externalName is set, fetch by ID as usual
 	users, err := client.Users.List(ctx)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb listing users")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to list users")
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, err
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 	var user *nbapi.User
 	for _, u := range users {

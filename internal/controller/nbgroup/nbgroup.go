@@ -143,8 +143,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		c.log.Info("external name blank or matches resource name, attempting adoption by Name", "name", cr.Spec.ForProvider.Name)
 		groups, err := client.Groups.List(ctx)
 		if err != nil {
-			c.log.Error(err, "received error on call to nb listing groups")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list groups")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		for _, apigroup := range groups {
 			if apigroup.Name == cr.Spec.ForProvider.Name {
@@ -175,8 +181,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		c.log.Info("external name matches ForProvider.Name, checking existence only", "name", cr.Spec.ForProvider.Name)
 		groups, err := client.Groups.List(ctx)
 		if err != nil {
-			c.log.Error(err, "received error on call to nb listing groups")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list groups")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		for _, apigroup := range groups {
 			if apigroup.Name == externalName {
@@ -203,7 +215,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	c.log.Info("external name set, fetching by ID", "externalName", externalName)
 	apigroup, err := client.Groups.Get(ctx, externalName)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb to get group", "group", externalName)
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to get group")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.

@@ -127,10 +127,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	settings, err := client.DNS.GetSettings(ctx)
 	if err != nil {
-		c.log.Error(err, "failed to get DNS settings")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to get DNS settings")
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 
 	cr.Status.AtProvider = v1alpha1.NbDnsSettingObservation{

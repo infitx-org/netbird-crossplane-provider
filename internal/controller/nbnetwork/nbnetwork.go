@@ -140,8 +140,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if externalName == "" || externalName == cr.Name {
 		networks, err := client.Networks.List(ctx)
 		if err != nil {
-			c.log.Error(err, "failed to list networks for adoption")
-			return managed.ExternalObservation{ResourceExists: false}, nil
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list networks")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		for _, net := range networks {
 			if net.Name == cr.Spec.ForProvider.Name {
@@ -169,7 +175,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// If we have an external name (and it's not just the resource name), fetch by ID
 	network, err := client.Networks.Get(ctx, externalName)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb getting networks")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to get network")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
