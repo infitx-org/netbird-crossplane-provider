@@ -376,7 +376,7 @@ func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi
 			c.log.Info("bidirectional doesn't match")
 			return false
 		}
-		// Compare only the Name field of each destination
+		// Compare only the Id field of each destination
 		destA := policyrule.Destinations
 		destB := nbPolicy.Rules[i].Destinations
 		if destA == nil || destB == nil || len(*destA) != len(*destB) {
@@ -384,12 +384,12 @@ func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi
 			return false
 		}
 		for j := range *destA {
-			if (*destA)[j].Name == nil || (*destB)[j].Name == nil || *(*destA)[j].Name != *(*destB)[j].Name {
-				c.log.Info("destination name doesn't match", "index", j)
+			if (*destA)[j].Id == nil || (*destB)[j].Id == nil || *(*destA)[j].Id != *(*destB)[j].Id {
+				c.log.Info("destination id doesn't match", "index", j)
 				return false
 			}
 		}
-		// Compare only the Name field of each source
+		// Compare only the Id field of each source
 		srcA := policyrule.Sources
 		srcB := nbPolicy.Rules[i].Sources
 		if srcA == nil || srcB == nil || len(*srcA) != len(*srcB) {
@@ -397,8 +397,8 @@ func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi
 			return false
 		}
 		for j := range *srcA {
-			if (*srcA)[j].Name == nil || (*srcB)[j].Name == nil || *(*srcA)[j].Name != *(*srcB)[j].Name {
-				c.log.Info("source name doesn't match", "index", j)
+			if (*srcA)[j].Id == nil || (*srcB)[j].Id == nil || *(*srcA)[j].Id != *(*srcB)[j].Id {
+				c.log.Info("source id doesn't match", "index", j)
 				return false
 			}
 		}
