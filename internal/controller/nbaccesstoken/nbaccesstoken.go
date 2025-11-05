@@ -134,44 +134,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	c.log.Info("Observing", "cr", cr)
 
 	externalName := meta.GetExternalName(cr)
-	// Adoption pattern: if externalName is blank or matches cr.Name, try to find by unique field (token name + user)
-	if externalName == "" || externalName == cr.Name {
-		c.log.Info("external name blank or matches resource name, attempting adoption by token name and user")
-		var userid string
-		if cr.Spec.ForProvider.UserName != nil {
-			users, err := client.Users.List(ctx)
-			if err != nil {
-				return managed.ExternalObservation{ResourceExists: false}, err
-			}
-			var apiuser *nbapi.User
-			for _, user := range users {
-				if *user.IsServiceUser && (user.Name == *cr.Spec.ForProvider.UserName) {
-					apiuser = &user
-					break
-				}
-			}
-			if apiuser == nil {
-				return managed.ExternalObservation{ResourceExists: false}, nil
-			}
-			userid = apiuser.Id
-		} else if cr.Spec.ForProvider.UserId != nil {
-			userid = *cr.Spec.ForProvider.UserId
-		} else {
-			return managed.ExternalObservation{ResourceExists: false}, nil
-		}
-		tokens, err := client.Tokens.List(ctx, userid)
-		if err != nil {
-			return managed.ExternalObservation{ResourceExists: false}, err
-		}
-		for _, token := range tokens {
-			if token.Name == cr.Spec.ForProvider.Name {
-				c.log.Info("found existing access token for adoption", "tokenid", token.Id)
-				meta.SetExternalName(cr, token.Id)
-				// Return early so reconciler persists external name and requeues
-				return managed.ExternalObservation{ResourceExists: false}, nil
-			}
-		}
-		// Not found, resource does not exist
+	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
@@ -180,7 +143,15 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	if cr.Spec.ForProvider.UserName != nil {
 		users, err := client.Users.List(ctx)
 		if err != nil {
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.log.Error(err, "Token invalid error detected during get, forcing token refresh")
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("accesskey not found")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		var apiuser *nbapi.User
 		for _, user := range users {
@@ -201,10 +172,15 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	accesstoken, err := client.Tokens.Get(ctx, userid, externalName)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb to get accesstoken", "accesstoken", accesstoken)
+		if auth.IsTokenInvalidError(err) {
+			c.log.Error(err, "Token invalid error detected during get, forcing token refresh")
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("accesskey not found")
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 	var lastused *string
 	if accesstoken.LastUsed != nil {

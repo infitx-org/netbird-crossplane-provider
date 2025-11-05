@@ -139,8 +139,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		c.log.Info("external name blank or matches resource name, attempting adoption by PeerGroupName or Peer")
 		networks, err := client.Networks.List(ctx)
 		if err != nil {
-			c.log.Error(err, "received error on call to nb listing networks")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list networks")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		var apinetwork *nbapi.Network
 		for _, network := range networks {
@@ -154,8 +160,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		}
 		routers, err := client.Networks.Routers(apinetwork.Id).List(ctx)
 		if err != nil {
-			c.log.Error(err, "failed to list network routers for adoption")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list routers")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		for _, router := range routers {
 			if cr.Spec.ForProvider.PeerGroupName != "" {
@@ -221,8 +233,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// If we have an external name (and it's not just the resource name), fetch by ID
 	networks, err := client.Networks.List(ctx)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb listing networks")
-		return managed.ExternalObservation{ResourceExists: false}, err
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to list networks")
+		return managed.ExternalObservation{
+			ResourceExists: false,
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 	var apinetwork *nbapi.Network
 	for _, network := range networks {
@@ -236,10 +254,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}
 	networkrouter, err := client.Networks.Routers(apinetwork.Id).Get(ctx, externalName)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb getting network router")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to get network router")
 		return managed.ExternalObservation{
 			ResourceExists: false,
-		}, nil
+		}, nil //return nil so that observe can return without error so that it passes to create.
 	}
 	if networkrouter.PeerGroups != nil && len(*networkrouter.PeerGroups) >= 1 {
 		cr.Status.AtProvider = v1alpha1.NbNetworkRouterObservation{

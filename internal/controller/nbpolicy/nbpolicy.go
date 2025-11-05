@@ -141,8 +141,14 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		c.log.Info("external name blank or matches resource name, attempting adoption by Name", "name", cr.Spec.ForProvider.Name)
 		policies, err := client.Policies.List(ctx)
 		if err != nil {
-			c.log.Error(err, "received error on call to nb listing policies")
-			return managed.ExternalObservation{ResourceExists: false}, err
+			if auth.IsTokenInvalidError(err) {
+				c.authManager.ForceRefresh(ctx)
+				return managed.ExternalObservation{}, err
+			}
+			c.log.Info("failed to list policies")
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil //return nil so that observe can return without error so that it passes to create.
 		}
 		for _, apipolicy := range policies {
 			if apipolicy.Name == cr.Spec.ForProvider.Name {
@@ -160,7 +166,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 
 	policy, err := client.Policies.Get(ctx, externalName)
 	if err != nil {
-		c.log.Error(err, "received error on call to nb getting policy")
+		if auth.IsTokenInvalidError(err) {
+			c.authManager.ForceRefresh(ctx)
+			return managed.ExternalObservation{}, err
+		}
+		c.log.Info("failed to get policy")
 		return managed.ExternalObservation{
 			ResourceExists: false,
 		}, nil //return nil so that observe can return without error so that it passes to create.
@@ -366,7 +376,7 @@ func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi
 			c.log.Info("bidirectional doesn't match")
 			return false
 		}
-		// Compare only the Name field of each destination
+		// Compare only the Id field of each destination
 		destA := policyrule.Destinations
 		destB := nbPolicy.Rules[i].Destinations
 		if destA == nil || destB == nil || len(*destA) != len(*destB) {
@@ -374,12 +384,12 @@ func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi
 			return false
 		}
 		for j := range *destA {
-			if (*destA)[j].Name == nil || (*destB)[j].Name == nil || *(*destA)[j].Name != *(*destB)[j].Name {
-				c.log.Info("destination name doesn't match", "index", j)
+			if (*destA)[j].Id == nil || (*destB)[j].Id == nil || *(*destA)[j].Id != *(*destB)[j].Id {
+				c.log.Info("destination id doesn't match", "index", j)
 				return false
 			}
 		}
-		// Compare only the Name field of each source
+		// Compare only the Id field of each source
 		srcA := policyrule.Sources
 		srcB := nbPolicy.Rules[i].Sources
 		if srcA == nil || srcB == nil || len(*srcA) != len(*srcB) {
@@ -387,8 +397,8 @@ func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi
 			return false
 		}
 		for j := range *srcA {
-			if (*srcA)[j].Name == nil || (*srcB)[j].Name == nil || *(*srcA)[j].Name != *(*srcB)[j].Name {
-				c.log.Info("source name doesn't match", "index", j)
+			if (*srcA)[j].Id == nil || (*srcB)[j].Id == nil || *(*srcA)[j].Id != *(*srcB)[j].Id {
+				c.log.Info("source id doesn't match", "index", j)
 				return false
 			}
 		}
