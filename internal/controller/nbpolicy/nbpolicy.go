@@ -412,9 +412,18 @@ func IsApiToNBPolicyUpToDate(nbPolicy v1alpha1.NbPolicyParameters, policy *nbapi
 			return false
 		}
 		if policyrule.PortRanges != nil && nbPolicy.Rules[i].PortRanges != nil {
-			if !reflect.DeepEqual(*policyrule.PortRanges, nbPolicy.Rules[i].PortRanges) {
-				c.log.Info("port ranges don't match")
+			// Compare each start/end pair
+			apiRanges := *policyrule.PortRanges
+			specRanges := nbPolicy.Rules[i].PortRanges
+			if len(apiRanges) != len(*specRanges) {
+				c.log.Info("port ranges length doesn't match")
 				return false
+			}
+			for j := range apiRanges {
+				if apiRanges[j].Start != (*specRanges)[j].Start || apiRanges[j].End != (*specRanges)[j].End {
+					c.log.Info("port range doesn't match", "index", j, "api", apiRanges[j], "spec", (*specRanges)[j])
+					return false
+				}
 			}
 		}
 		// Ports nil check and comparison
