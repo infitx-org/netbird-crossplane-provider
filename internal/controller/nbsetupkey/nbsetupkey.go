@@ -18,6 +18,7 @@ package nbsetupkey
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -38,6 +39,7 @@ import (
 	"github.com/crossplane/netbird-crossplane-provider/apis/vpn/v1alpha1"
 	auth "github.com/crossplane/netbird-crossplane-provider/internal/controller/nb"
 	"github.com/crossplane/netbird-crossplane-provider/internal/features"
+	netbird "github.com/netbirdio/netbird/management/client/rest"
 	"github.com/netbirdio/netbird/management/server/http/api"
 )
 
@@ -68,6 +70,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		managed.WithPollInterval(o.PollInterval),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 		managed.WithConnectionPublishers(cps...),
+		managed.WithInitializers(),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
 		reconcilerOptions = append(reconcilerOptions, managed.WithManagementPolicies())
@@ -121,8 +124,13 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 
 // An ExternalClient observes, then either creates, updates, or deletes an
 // external resource to ensure it reflects the managed resource's desired state.
+type authClient interface {
+	GetClient(ctx context.Context) (*netbird.Client, error)
+	ForceRefresh(ctx context.Context) error
+}
+
 type external struct {
-	authManager *auth.AuthManager
+	authManager authClient
 	log         logr.Logger
 }
 
@@ -136,7 +144,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.Wrap(err, "failed to get authenticated client")
 	}
 	c.log.Info("Observing", "cr", cr)
-	externalName := meta.GetExternalName(cr)
+	externalName := resolveSetupKeyLookupID(cr)
 
 	if externalName == "" {
 		return managed.ExternalObservation{ResourceExists: false}, nil
@@ -149,10 +157,18 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 			c.authManager.ForceRefresh(ctx)
 			return managed.ExternalObservation{}, err
 		}
-		c.log.Info("setupkey not found")
-		return managed.ExternalObservation{
-			ResourceExists: false,
-		}, nil //return nil so that observe can return without error so that it passes to create.
+		if isSetupKeyNotFoundError(err) {
+			c.log.Info("setupkey not found", "external-name", externalName)
+			return managed.ExternalObservation{
+				ResourceExists: false,
+			}, nil
+		}
+		return managed.ExternalObservation{}, errors.Wrapf(err, "failed to observe setup key %q", externalName)
+	}
+
+	// Repair stale or missing external-name annotations after recovering via status ID.
+	if meta.GetExternalName(cr) != setupkey.Id {
+		meta.SetExternalName(cr, setupkey.Id)
 	}
 
 	if setupkey.Expires.Before(time.Now()) || setupkey.Revoked {
@@ -182,6 +198,27 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		ResourceUpToDate:  true,
 		ConnectionDetails: managed.ConnectionDetails{},
 	}, nil
+}
+
+func resolveSetupKeyLookupID(cr *v1alpha1.NbSetupKey) string {
+	externalName := meta.GetExternalName(cr)
+	switch {
+	case externalName == "":
+		return cr.Status.AtProvider.Id
+	case cr.Status.AtProvider.Id != "" && externalName == cr.GetName() && cr.Status.AtProvider.Id != externalName:
+		// Recover from older reconciles that defaulted the external name to the Kubernetes object name.
+		return cr.Status.AtProvider.Id
+	default:
+		return externalName
+	}
+}
+
+func isSetupKeyNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "setup key") && strings.Contains(errStr, "not found")
 }
 
 // func isUpToDate(nbSetupKeyParameters *v1alpha1.NbSetupKeyParameters, setupkey *api.SetupKey, log logr.Logger) bool {
@@ -243,7 +280,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.Wrap(err, "failed to get authenticated client")
 	}
 	c.log.Info("Updating", "cr", cr)
-	setupKeyId := meta.GetExternalName(cr)
+	setupKeyId := resolveSetupKeyLookupID(cr)
 	if setupKeyId == "" {
 		return managed.ExternalUpdate{}, errors.New("can't find setupKeyId")
 	}
@@ -267,7 +304,12 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) error {
 	}
 	c.log.Info("Deleting", "cr", cr)
 
-	err = client.SetupKeys.Delete(ctx, meta.GetExternalName(cr))
+	setupKeyID := resolveSetupKeyLookupID(cr)
+	if setupKeyID == "" {
+		return errors.New("can't find setupKeyId")
+	}
+
+	err = client.SetupKeys.Delete(ctx, setupKeyID)
 	if err != nil {
 		return err
 	}
